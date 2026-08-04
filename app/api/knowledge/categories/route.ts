@@ -1,0 +1,5 @@
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { createClient } from "@/lib/supabase/server";
+const schema=z.object({workspaceId:z.string().uuid(),name:z.string().min(2).max(80)});
+export async function POST(request:Request){const p=schema.safeParse(await request.json().catch(()=>null));if(!p.success)return NextResponse.json({error:"Invalid category"},{status:400});const db=await createClient();const {data:{user}}=await db.auth.getUser();if(!user)return NextResponse.json({error:"Unauthorized"},{status:401});const {data:m}=await db.from("memberships").select("id").eq("workspace_id",p.data.workspaceId).eq("user_id",user.id).maybeSingle();if(!m)return NextResponse.json({error:"Forbidden"},{status:403});const slug=p.data.name.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");const {data,error}=await db.from("kb_categories").insert({workspace_id:p.data.workspaceId,name:p.data.name.trim(),slug}).select().single();if(error)return NextResponse.json({error:error.message},{status:400});return NextResponse.json({category:data});}
