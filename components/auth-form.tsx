@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 function GoogleIcon() {
@@ -24,21 +24,20 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const [busy, setBusy] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
   const router = useRouter();
-  const search = useSearchParams();
 
   useEffect(() => {
+    const search = new URLSearchParams(window.location.search);
     const oauthError = search.get("error");
     const errorCode = search.get("error_code");
     if (!oauthError) return;
     const readable = oauthError.replace(/\+/g, " ");
     setError(errorCode ? `${readable} (${errorCode})` : readable);
-  }, [search]);
+  }, []);
 
   async function signInWithGoogle() {
     setGoogleBusy(true);
     setError("");
     setNotice("");
-
     try {
       const supabase = createClient();
       const { error: authError } = await supabase.auth.signInWithOAuth({
@@ -48,11 +47,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
           queryParams: { access_type: "offline", prompt: "consent" },
         },
       });
-
-      if (authError) {
-        setError(authError.message);
-        setGoogleBusy(false);
-      }
+      if (authError) { setError(authError.message); setGoogleBusy(false); }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Google sign-in failed unexpectedly.");
       setGoogleBusy(false);
@@ -64,10 +59,8 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
     setBusy(true);
     setError("");
     setNotice("");
-
     try {
       const supabase = createClient();
-
       if (mode === "login") {
         const { data, error: authError } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
         if (authError) { setError(authError.message); return; }
@@ -76,7 +69,6 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
         router.refresh();
         return;
       }
-
       const redirectTo = `${window.location.origin}/auth/complete?next=/onboarding`;
       const { data, error: authError } = await supabase.auth.signUp({ email: email.trim(), password, options: { emailRedirectTo: redirectTo } });
       if (authError) { setError(authError.message); return; }
