@@ -5,6 +5,13 @@ import { createAdminClient } from "@/lib/supabase/admin";
 export const dynamic = "force-dynamic";
 
 type Props = { params: Promise<{ workspaceSlug: string }>; searchParams: Promise<{ q?: string }> };
+type PublicArticle = {
+  id: string;
+  title: string;
+  slug: string;
+  excerpt: string | null;
+  kb_categories: unknown;
+};
 
 function categoryName(value: unknown) {
   if (Array.isArray(value)) return (value[0] as { name?: string } | undefined)?.name ?? "Guide";
@@ -32,11 +39,10 @@ export default async function HelpCenterPage({ params, searchParams }: Props) {
     .not("published_at", "is", null)
     .order("published_at", { ascending: false });
 
-  if (safeQuery) {
-    articleQuery = articleQuery.or(`title.ilike.%${safeQuery}%,excerpt.ilike.%${safeQuery}%`);
-  }
+  if (safeQuery) articleQuery = articleQuery.or(`title.ilike.%${safeQuery}%,excerpt.ilike.%${safeQuery}%`);
 
-  const { data: articles } = await articleQuery;
+  const { data } = await articleQuery;
+  const articles = (data ?? []) as unknown as PublicArticle[];
 
   return (
     <main className="help-page">
@@ -51,14 +57,14 @@ export default async function HelpCenterPage({ params, searchParams }: Props) {
       </header>
 
       <section className="help-grid">
-        {(articles ?? []).map((article) => (
+        {articles.map((article) => (
           <Link href={`/help/${workspace.slug}/${article.slug}`} key={article.id} className="help-card">
             <small>{categoryName(article.kb_categories)}</small>
             <h2>{article.title}</h2>
             <p>{article.excerpt || "Open this article to read the full guide."}</p>
           </Link>
         ))}
-        {!articles?.length && <div className="empty-state">No published articles matched your search.</div>}
+        {!articles.length && <div className="empty-state">No published articles matched your search.</div>}
       </section>
     </main>
   );
