@@ -1,5 +1,7 @@
-import { createServerClient } from "@supabase/ssr";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse,type NextRequest } from "next/server";
+
+type CookieToSet={name:string;value:string;options:CookieOptions};
 
 async function customDomainRewrite(request:NextRequest){
  const host=(request.headers.get("host")??"").split(":")[0].toLowerCase();
@@ -15,7 +17,7 @@ export async function middleware(request:NextRequest){
  const url=process.env.NEXT_PUBLIC_SUPABASE_URL;const key=process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
  if(!url||!key)return NextResponse.next();
  let response=NextResponse.next({request});
- const supabase=createServerClient(url,key,{cookies:{getAll:()=>request.cookies.getAll(),setAll:(items)=>{items.forEach(({name,value})=>request.cookies.set(name,value));response=NextResponse.next({request});items.forEach(({name,value,options})=>response.cookies.set(name,value,options));}}});
+ const supabase=createServerClient(url,key,{cookies:{getAll:()=>request.cookies.getAll(),setAll:(items:CookieToSet[])=>{items.forEach(({name,value})=>request.cookies.set(name,value));response=NextResponse.next({request});items.forEach(({name,value,options})=>response.cookies.set(name,value,options));}}});
  const {data:{user}}=await supabase.auth.getUser();
  if(!user&&["/inbox","/knowledge","/settings"].some(path=>request.nextUrl.pathname.startsWith(path)))return NextResponse.redirect(new URL("/login",request.url));
  return response;
