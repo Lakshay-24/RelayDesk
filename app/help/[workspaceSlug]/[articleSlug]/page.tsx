@@ -6,6 +6,18 @@ import { sanitizeArticleHtml } from "@/lib/sanitize-html";
 export const dynamic = "force-dynamic";
 
 type Props = { params: Promise<{ workspaceSlug: string; articleSlug: string }> };
+type PublicArticle = {
+  id: string;
+  title: string;
+  excerpt: string | null;
+  body_html: string | null;
+  kb_categories: unknown;
+};
+
+function categoryName(value: unknown) {
+  if (Array.isArray(value)) return (value[0] as { name?: string } | undefined)?.name ?? "Guide";
+  return (value as { name?: string } | null)?.name ?? "Guide";
+}
 
 export default async function HelpArticlePage({ params }: Props) {
   const { workspaceSlug, articleSlug } = await params;
@@ -19,7 +31,7 @@ export default async function HelpArticlePage({ params }: Props) {
 
   if (!workspace) notFound();
 
-  const { data: article } = await db
+  const { data } = await db
     .from("kb_articles")
     .select("id,title,excerpt,body_html,published_at,kb_categories(name)")
     .eq("workspace_id", workspace.id)
@@ -27,11 +39,8 @@ export default async function HelpArticlePage({ params }: Props) {
     .not("published_at", "is", null)
     .maybeSingle();
 
-  if (!article) notFound();
-
-  const category = Array.isArray(article.kb_categories)
-    ? article.kb_categories[0]?.name
-    : (article.kb_categories as { name?: string } | null)?.name;
+  if (!data) notFound();
+  const article = data as unknown as PublicArticle;
 
   return (
     <main className="help-article-page">
@@ -39,12 +48,12 @@ export default async function HelpArticlePage({ params }: Props) {
         <Link href={`/help/${workspace.slug}`}>← {workspace.name} help center</Link>
       </nav>
       <article>
-        <p className="eyebrow">{category ?? "Guide"}</p>
+        <p className="eyebrow">{categoryName(article.kb_categories)}</p>
         <h1>{article.title}</h1>
         {article.excerpt && <p className="help-article-excerpt">{article.excerpt}</p>}
         <div
           className="help-article-body"
-          dangerouslySetInnerHTML={{ __html: sanitizeArticleHtml(article.body_html) }}
+          dangerouslySetInnerHTML={{ __html: sanitizeArticleHtml(article.body_html ?? "") }}
         />
       </article>
     </main>
