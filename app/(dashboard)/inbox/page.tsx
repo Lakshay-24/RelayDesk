@@ -6,5 +6,5 @@ export default async function InboxPage() {
   const context = await getAgentContext();
   if (!context) redirect("/onboarding");
   const data = await getInboxData(context.workspace.id);
-  return <InboxWorkspace workspace={context.workspace} membership={context.membership} initialConversations={data.conversations} initialMessages={data.messages} />;
+  return <InboxWorkspace workspace={context.workspace} membership={context.membership} members={data.members} cannedResponses={data.cannedResponses} initialConversations={data.conversations} initialMessages={data.messages} />;
 }
