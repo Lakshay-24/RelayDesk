@@ -11,7 +11,29 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
   const router = useRouter();
+
+  async function signInWithGoogle() {
+    setGoogleBusy(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const supabase = createClient();
+      const { error: authError } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback?next=/onboarding`,
+        },
+      });
+
+      if (authError) setError(authError.message);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Google sign-in failed unexpectedly.");
+      setGoogleBusy(false);
+    }
+  }
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -78,6 +100,22 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
           ? "Sign in to your shared customer inbox."
           : "Start your support workspace in minutes."}
       </p>
+
+      <button
+        type="button"
+        className="button secondary"
+        disabled={googleBusy || busy}
+        onClick={signInWithGoogle}
+      >
+        {googleBusy
+          ? "Opening Google…"
+          : mode === "login"
+            ? "Continue with Google"
+            : "Create account with Google"}
+      </button>
+
+      <p className="muted">or continue with email</p>
+
       <form className="form-stack" onSubmit={submit}>
         <label>
           Email
@@ -102,7 +140,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
         </label>
         {error && <p className="form-error">{error}</p>}
         {notice && <p className="muted">{notice}</p>}
-        <button className="primary-button" disabled={busy}>
+        <button className="primary-button" disabled={busy || googleBusy}>
           {busy ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}
         </button>
       </form>
