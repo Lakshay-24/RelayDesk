@@ -1,10 +1,34 @@
-import { createServerClient } from "@supabase/ssr";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
+type CookieToSet = {
+  name: string;
+  value: string;
+  options: CookieOptions;
+};
+
 export async function createClient() {
-  const url=process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key=process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if(!url||!key) throw new Error("Supabase public credentials are not configured");
-  const store=await cookies();
-  return createServerClient(url,key,{cookies:{getAll:()=>store.getAll(),setAll:(items)=>{try{items.forEach(({name,value,options})=>store.set(name,value,options));}catch{}}}});
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!url || !key) {
+    throw new Error("Supabase public credentials are not configured");
+  }
+
+  const store = await cookies();
+
+  return createServerClient(url, key, {
+    cookies: {
+      getAll: () => store.getAll(),
+      setAll: (items: CookieToSet[]) => {
+        try {
+          items.forEach(({ name, value, options }) => {
+            store.set(name, value, options);
+          });
+        } catch {
+          // Server Components cannot always write cookies. Middleware refreshes them.
+        }
+      },
+    },
+  });
 }
