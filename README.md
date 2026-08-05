@@ -107,3 +107,5 @@ The code and schema do not manufacture provider success. The following require r
 - AI Gateway credentials and live model response
 
 See the evaluator runbook for the exact evidence required for each external integration.
+
+<!-- deployment refresh: 2026-08-05T20:13+05:30 -->
