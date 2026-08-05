@@ -16,6 +16,12 @@ function GoogleIcon() {
   );
 }
 
+function appOrigin() {
+  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/$/, "");
+  if (configured?.startsWith("https://")) return configured;
+  return window.location.origin;
+}
+
 export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -27,11 +33,11 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
 
   useEffect(() => {
     const search = new URLSearchParams(window.location.search);
-    const oauthError = search.get("error");
-    const errorCode = search.get("error_code");
+    const description = search.get("error_description");
+    const oauthError = description || search.get("error");
     if (!oauthError) return;
-    const readable = oauthError.replace(/\+/g, " ");
-    setError(errorCode ? `${readable} (${errorCode})` : readable);
+    const details = [search.get("error_code"), search.get("provider_error")].filter(Boolean);
+    setError(details.length ? `${oauthError} (${details.join(" · ")})` : oauthError);
   }, []);
 
   async function signInWithGoogle() {
@@ -40,14 +46,15 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
     setNotice("");
     try {
       const supabase = createClient();
+      const redirectTo = `${appOrigin()}/auth/complete?next=/inbox`;
       const { error: authError } = await supabase.auth.signInWithOAuth({
         provider: "google",
-        options: {
-          redirectTo: `${window.location.origin}/auth/complete?next=/onboarding`,
-          queryParams: { access_type: "offline", prompt: "consent" },
-        },
+        options: { redirectTo, queryParams: { access_type: "offline", prompt: "consent" } },
       });
-      if (authError) { setError(authError.message); setGoogleBusy(false); }
+      if (authError) {
+        setError(authError.message);
+        setGoogleBusy(false);
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Google sign-in failed unexpectedly.");
       setGoogleBusy(false);
@@ -69,10 +76,10 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
         router.refresh();
         return;
       }
-      const redirectTo = `${window.location.origin}/auth/complete?next=/onboarding`;
+      const redirectTo = `${appOrigin()}/auth/complete?next=/onboarding`;
       const { data, error: authError } = await supabase.auth.signUp({ email: email.trim(), password, options: { emailRedirectTo: redirectTo } });
       if (authError) { setError(authError.message); return; }
-      if (!data.session) { setNotice("Account created. Confirm your email to continue directly to workspace setup."); return; }
+      if (!data.session) { setNotice("Account created. Confirm your email to continue to workspace setup."); return; }
       router.replace("/onboarding");
       router.refresh();
     } catch (caught) {

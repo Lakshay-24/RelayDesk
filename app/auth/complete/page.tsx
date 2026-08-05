@@ -1,40 +1,54 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+
+const ERROR_KEYS = ["error", "error_code", "error_description", "provider_error"] as const;
+
+function safeNext(value: string | null) {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) return "/onboarding";
+  if (value.startsWith("/auth/") || value.startsWith("/login") || value.startsWith("/signup")) return "/onboarding";
+  return value;
+}
 
 export default function OAuthCompletePage() {
-  const router = useRouter();
-
   useEffect(() => {
     const search = new URLSearchParams(window.location.search);
     const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-    const errorDescription = hash.get("error_description") || hash.get("error") || search.get("error_description") || search.get("error");
-    const errorCode = hash.get("error_code") || search.get("error_code");
+    const errorParams = new URLSearchParams();
 
-    if (errorDescription) {
-      const params = new URLSearchParams({ error: errorDescription, ...(errorCode ? { error_code: errorCode } : {}) });
-      router.replace(`/login?${params.toString()}`);
+    for (const key of ERROR_KEYS) {
+      const value = hash.get(key) || search.get(key);
+      if (value) errorParams.set(key, value);
+    }
+
+    if (errorParams.has("error") || errorParams.has("error_description")) {
+      window.history.replaceState(null, "", window.location.pathname);
+      window.location.replace(`/login?${errorParams.toString()}`);
       return;
     }
 
     const code = search.get("code");
     if (!code) {
-      router.replace("/login?error=Google+sign-in+did+not+return+an+authorization+code");
+      const params = new URLSearchParams({
+        error: "OAuth completion failed",
+        error_code: "missing_oauth_code",
+        error_description: "Supabase returned neither an authorization code nor a provider error.",
+      });
+      window.location.replace(`/login?${params.toString()}`);
       return;
     }
 
-    const next = search.get("next") || "/onboarding";
-    const params = new URLSearchParams({ code, next: next.startsWith("/") ? next : "/onboarding" });
+    const params = new URLSearchParams({ code, next: safeNext(search.get("next")) });
+    window.history.replaceState(null, "", window.location.pathname);
     window.location.replace(`/auth/callback?${params.toString()}`);
-  }, [router]);
+  }, []);
 
   return (
     <main className="auth-page">
       <section className="auth-card">
         <div className="eyebrow">RelayDesk</div>
         <h1>Finishing sign-in</h1>
-        <p className="muted">Connecting your Google account securely…</p>
+        <p className="muted">Connecting your account securely…</p>
       </section>
     </main>
   );
