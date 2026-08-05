@@ -6,6 +6,11 @@ export const dynamic = "force-dynamic";
 
 type Props = { params: Promise<{ workspaceSlug: string }>; searchParams: Promise<{ q?: string }> };
 
+function categoryName(value: unknown) {
+  if (Array.isArray(value)) return (value[0] as { name?: string } | undefined)?.name ?? "Guide";
+  return (value as { name?: string } | null)?.name ?? "Guide";
+}
+
 export default async function HelpCenterPage({ params, searchParams }: Props) {
   const { workspaceSlug } = await params;
   const { q = "" } = await searchParams;
@@ -34,21 +39,21 @@ export default async function HelpCenterPage({ params, searchParams }: Props) {
   const { data: articles } = await articleQuery;
 
   return (
-    <main className="help-center-page">
-      <header className="help-center-header">
+    <main className="help-page">
+      <header>
         <p className="eyebrow">Help center</p>
         <h1>{workspace.name}</h1>
         <p className="muted">Find answers, guides and troubleshooting steps.</p>
-        <form className="help-search">
-          <input name="q" defaultValue={q} placeholder="Search help articles" />
+        <form className="landing-actions">
+          <input className="help-search" name="q" defaultValue={q} placeholder="Search help articles" />
           <button className="primary-button">Search</button>
         </form>
       </header>
 
-      <section className="help-article-list">
+      <section className="help-grid">
         {(articles ?? []).map((article) => (
-          <Link href={`/help/${workspace.slug}/${article.slug}`} key={article.id} className="help-article-card">
-            <small>{Array.isArray(article.kb_categories) ? article.kb_categories[0]?.name : article.kb_categories?.name ?? "Guide"}</small>
+          <Link href={`/help/${workspace.slug}/${article.slug}`} key={article.id} className="help-card">
+            <small>{categoryName(article.kb_categories)}</small>
             <h2>{article.title}</h2>
             <p>{article.excerpt || "Open this article to read the full guide."}</p>
           </Link>
