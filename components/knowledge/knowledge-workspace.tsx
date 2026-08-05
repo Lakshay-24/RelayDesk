@@ -1,14 +1,14 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Bold, BookOpenText, Eye, Heading2, Italic, Link2, List, Plus, Save, Trash2 } from "lucide-react";
+import { Bold, BookOpenText, Eye, Heading2, Italic, Link2, List, Plus, Save, Search, Trash2 } from "lucide-react";
 import type { Workspace } from "@/types/domain";
 import { CategoryManager, type KnowledgeCategory } from "@/components/knowledge/category-manager";
 
 type Article={id:string;workspace_id:string;category_id:string|null;title:string;slug:string;body_html:string;excerpt:string|null;published_at:string|null;updated_at:string;kb_categories?:{name:string}|{name:string}[]|null};
 
 export function KnowledgeWorkspace({workspace,initialArticles,initialCategories}:{workspace:Workspace;initialArticles:Article[];initialCategories:KnowledgeCategory[]}){
- const [articles,setArticles]=useState(initialArticles);const [categories,setCategories]=useState(initialCategories.sort((a,b)=>a.position-b.position));const [selectedId,setSelectedId]=useState(initialArticles[0]?.id??"");const [query,setQuery]=useState("");const [notice,setNotice]=useState("");const [preview,setPreview]=useState(false);const [busy,setBusy]=useState(false);const bodyRef=useRef<HTMLTextAreaElement|null>(null);
+ const [articles,setArticles]=useState(initialArticles);const [categories,setCategories]=useState([...initialCategories].sort((a,b)=>a.position-b.position));const [selectedId,setSelectedId]=useState(initialArticles[0]?.id??"");const [query,setQuery]=useState("");const [notice,setNotice]=useState("");const [preview,setPreview]=useState(false);const [busy,setBusy]=useState(false);const bodyRef=useRef<HTMLTextAreaElement|null>(null);
  const selected=articles.find(a=>a.id===selectedId);const filtered=useMemo(()=>articles.filter(a=>`${a.title} ${a.excerpt??""}`.toLowerCase().includes(query.toLowerCase())),[articles,query]);
  const patch=(changes:Partial<Article>)=>selected&&setArticles(v=>v.map(a=>a.id===selected.id?{...a,...changes}:a));
  function createDraft(){const id=`draft-${crypto.randomUUID()}`;setArticles(v=>[{id,workspace_id:workspace.id,category_id:categories[0]?.id??null,title:"Untitled article",slug:`article-${Date.now()}`,body_html:"",excerpt:null,published_at:null,updated_at:new Date().toISOString()},...v]);setSelectedId(id);setPreview(false);setNotice("")}
