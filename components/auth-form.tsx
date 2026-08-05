@@ -5,6 +5,17 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
+function GoogleIcon() {
+  return (
+    <svg className="google-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="#4285F4" d="M21.8 12.2c0-.7-.1-1.4-.2-2H12v3.8h5.5a4.7 4.7 0 0 1-2 3.1v2.6h3.2c1.9-1.8 3.1-4.4 3.1-7.5Z" />
+      <path fill="#34A853" d="M12 22c2.7 0 5-.9 6.7-2.3l-3.2-2.6c-.9.6-2 1-3.5 1-2.6 0-4.8-1.8-5.6-4.2H3.1v2.7A10.1 10.1 0 0 0 12 22Z" />
+      <path fill="#FBBC05" d="M6.4 13.9a6.2 6.2 0 0 1 0-3.8V7.4H3.1a10.1 10.1 0 0 0 0 9.2l3.3-2.7Z" />
+      <path fill="#EA4335" d="M12 5.9c1.6 0 3 .5 4.1 1.6l3-3A10 10 0 0 0 3.1 7.4l3.3 2.7C7.2 7.7 9.4 5.9 12 5.9Z" />
+    </svg>
+  );
+}
+
 export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -28,7 +39,10 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
         },
       });
 
-      if (authError) setError(authError.message);
+      if (authError) {
+        setError(authError.message);
+        setGoogleBusy(false);
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Google sign-in failed unexpectedly.");
       setGoogleBusy(false);
@@ -95,26 +109,11 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
     <section className="auth-card">
       <div className="eyebrow">RelayDesk</div>
       <h1>{mode === "login" ? "Welcome back" : "Create your account"}</h1>
-      <p className="muted">
+      <p className="muted auth-intro">
         {mode === "login"
           ? "Sign in to your shared customer inbox."
           : "Start your support workspace in minutes."}
       </p>
-
-      <button
-        type="button"
-        className="button secondary"
-        disabled={googleBusy || busy}
-        onClick={signInWithGoogle}
-      >
-        {googleBusy
-          ? "Opening Google…"
-          : mode === "login"
-            ? "Continue with Google"
-            : "Create account with Google"}
-      </button>
-
-      <p className="muted">or continue with email</p>
 
       <form className="form-stack" onSubmit={submit}>
         <label>
@@ -140,11 +139,32 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
         </label>
         {error && <p className="form-error">{error}</p>}
         {notice && <p className="muted">{notice}</p>}
-        <button className="primary-button" disabled={busy || googleBusy}>
+        <button className="primary-button auth-submit" disabled={busy || googleBusy}>
           {busy ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}
         </button>
       </form>
-      <p className="muted">
+
+      <div className="auth-divider" role="separator">
+        <span>or</span>
+      </div>
+
+      <button
+        type="button"
+        className="google-auth-button"
+        disabled={googleBusy || busy}
+        onClick={signInWithGoogle}
+      >
+        <GoogleIcon />
+        <span>
+          {googleBusy
+            ? "Opening Google…"
+            : mode === "login"
+              ? "Continue with Google"
+              : "Create account with Google"}
+        </span>
+      </button>
+
+      <p className="muted auth-switch">
         {mode === "login" ? (
           <>
             New here? <Link href="/signup">Create an account</Link>
