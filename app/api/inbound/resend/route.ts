@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from "crypto";
 import { z } from "zod";
 import { processInboundEmail } from "@/lib/inbound-email";
 
@@ -21,13 +22,37 @@ function splitReferences(value?: string | null) {
   return value?.match(/<[^>]+>/g) ?? [];
 }
 
+function verifyResendWebhook(payload: string, request: Request) {
+  const secret = process.env.RESEND_WEBHOOK_SECRET;
+  const id = request.headers.get("svix-id");
+  const timestamp = request.headers.get("svix-timestamp");
+  const signatureHeader = request.headers.get("svix-signature");
+  if (!secret || !id || !timestamp || !signatureHeader) return false;
+
+  const seconds = Number(timestamp);
+  if (!Number.isFinite(seconds) || Math.abs(Date.now() / 1000 - seconds) > 300) return false;
+
+  try {
+    const key = Buffer.from(secret.replace(/^whsec_/, ""), "base64");
+    const expected = createHmac("sha256", key).update(`${id}.${timestamp}.${payload}`).digest();
+    return signatureHeader.split(" ").some((entry) => {
+      const [, encoded] = entry.split(",", 2);
+      if (!encoded) return false;
+      const actual = Buffer.from(encoded, "base64");
+      return actual.length === expected.length && timingSafeEqual(actual, expected);
+    });
+  } catch {
+    return false;
+  }
+}
+
 export async function POST(request: Request) {
-  const secret = process.env.EMAIL_WEBHOOK_SECRET;
-  if (!secret || request.headers.get("x-webhook-secret") !== secret) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  const rawPayload = await request.text();
+  if (!verifyResendWebhook(rawPayload, request)) {
+    return Response.json({ error: "Invalid webhook signature" }, { status: 401 });
   }
 
-  const parsed = eventSchema.safeParse(await request.json().catch(() => null));
+  const parsed = eventSchema.safeParse(JSON.parse(rawPayload));
   if (!parsed.success) return Response.json({ error: "Invalid Resend event" }, { status: 400 });
 
   const apiKey = process.env.RESEND_API_KEY;
@@ -48,7 +73,6 @@ export async function POST(request: Request) {
   const headers = email.headers ?? {};
   const from = headers.from || email.from;
   const inReplyTo = headers["in-reply-to"] || null;
-  const references = splitReferences(headers.references);
 
   try {
     const result = await processInboundEmail({
@@ -59,7 +83,7 @@ export async function POST(request: Request) {
       html: email.html,
       messageId: email.message_id || `<resend-${email.id}>`,
       inReplyTo,
-      references,
+      references: splitReferences(headers.references),
     });
     return Response.json({ ok: true, ...result });
   } catch (error) {
