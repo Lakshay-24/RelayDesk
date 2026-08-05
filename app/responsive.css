@@ -1,0 +1,44 @@
+/* Viewport-specific refinements layered after globals.css. */
+html{overflow-x:hidden}body{min-width:320px}.auth-page{min-height:100svh;display:grid;place-items:center;padding:clamp(16px,3vw,32px)}
+
+@media (min-width:1366px) and (max-width:1599px){
+  .workspace-page{grid-template-columns:minmax(285px,310px) minmax(0,1fr) minmax(270px,300px)}
+  .conversation-header{padding-inline:18px}
+  .conversation-header .filters{gap:6px}
+  .conversation-header select{max-width:132px}
+  .onboarding-page{grid-template-columns:minmax(0,1fr) minmax(360px,430px);padding-inline:clamp(44px,5vw,80px)}
+  .onboarding-copy h1{font-size:clamp(52px,5vw,72px);max-width:760px}
+  .knowledge-page,.settings-page{padding-inline:clamp(28px,3vw,48px)}
+}
+
+@media (min-width:1600px){
+  .dashboard-shell{grid-template-columns:240px minmax(0,1fr)}
+  .sidebar{padding:28px 18px}
+  .workspace-page{grid-template-columns:340px minmax(520px,1fr) 330px}
+  .pane-header{padding:24px}
+  .messages{padding:30px clamp(28px,3vw,52px)}
+  .onboarding-page{grid-template-columns:minmax(0,760px) minmax(380px,460px);justify-content:center;gap:clamp(70px,7vw,130px);padding-inline:60px}
+  .onboarding-copy h1{font-size:76px;max-width:760px}
+  .knowledge-page,.settings-page{max-width:1500px;padding:44px}
+  .auth-card{width:460px;padding:36px}
+}
+
+@media (min-width:1920px){
+  .workspace-page{grid-template-columns:360px minmax(640px,1fr) 350px}
+  .onboarding-page{grid-template-columns:760px 460px;gap:150px}
+  .knowledge-page,.settings-page{max-width:1600px}
+}
+
+@media (max-height:760px) and (min-width:721px){
+  .onboarding-page{align-items:start;padding-block:28px}
+  .onboarding-copy h1{margin-block:10px;font-size:clamp(44px,5vw,64px)}
+  .onboarding-copy>p{margin-block:12px;font-size:17px}
+  .onboarding-points{margin-top:16px}
+  .onboarding-card{padding:24px}
+  .auth-page{align-items:start;padding-top:28px}
+}
+
+@media (max-width:720px){
+  .auth-page{padding:14px 12px 82px}
+  .auth-card{width:100%;max-width:480px}
+}
