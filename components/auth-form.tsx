@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 function GoogleIcon() {
@@ -24,6 +24,15 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const [busy, setBusy] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
   const router = useRouter();
+  const search = useSearchParams();
+
+  useEffect(() => {
+    const oauthError = search.get("error");
+    const errorCode = search.get("error_code");
+    if (!oauthError) return;
+    const readable = oauthError.replace(/\+/g, " ");
+    setError(errorCode ? `${readable} (${errorCode})` : readable);
+  }, [search]);
 
   async function signInWithGoogle() {
     setGoogleBusy(true);
@@ -35,7 +44,8 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
       const { error: authError } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/auth/callback?next=/onboarding`,
+          redirectTo: `${window.location.origin}/auth/complete?next=/onboarding`,
+          queryParams: { access_type: "offline", prompt: "consent" },
         },
       });
 
@@ -59,43 +69,18 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
       const supabase = createClient();
 
       if (mode === "login") {
-        const { data, error: authError } = await supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password,
-        });
-
-        if (authError) {
-          setError(authError.message);
-          return;
-        }
-
-        if (!data.session) {
-          setError("Sign-in succeeded but no session was created. Check your Supabase Auth configuration.");
-          return;
-        }
-
+        const { data, error: authError } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+        if (authError) { setError(authError.message); return; }
+        if (!data.session) { setError("Sign-in succeeded but no session was created. Check your Supabase Auth configuration."); return; }
         router.replace("/inbox");
         router.refresh();
         return;
       }
 
-      const redirectTo = `${window.location.origin}/auth/callback?next=/onboarding`;
-      const { data, error: authError } = await supabase.auth.signUp({
-        email: email.trim(),
-        password,
-        options: { emailRedirectTo: redirectTo },
-      });
-
-      if (authError) {
-        setError(authError.message);
-        return;
-      }
-
-      if (!data.session) {
-        setNotice("Account created. Confirm your email to continue directly to workspace setup.");
-        return;
-      }
-
+      const redirectTo = `${window.location.origin}/auth/complete?next=/onboarding`;
+      const { data, error: authError } = await supabase.auth.signUp({ email: email.trim(), password, options: { emailRedirectTo: redirectTo } });
+      if (authError) { setError(authError.message); return; }
+      if (!data.session) { setNotice("Account created. Confirm your email to continue directly to workspace setup."); return; }
       router.replace("/onboarding");
       router.refresh();
     } catch (caught) {
@@ -109,72 +94,20 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
     <section className="auth-card">
       <div className="eyebrow">RelayDesk</div>
       <h1>{mode === "login" ? "Welcome back" : "Create your account"}</h1>
-      <p className="muted auth-intro">
-        {mode === "login"
-          ? "Sign in to your shared customer inbox."
-          : "Start your support workspace in minutes."}
-      </p>
-
+      <p className="muted auth-intro">{mode === "login" ? "Sign in to your shared customer inbox." : "Start your support workspace in minutes."}</p>
       <form className="form-stack" onSubmit={submit}>
-        <label>
-          Email
-          <input
-            type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            placeholder="you@company.com"
-            required
-          />
-        </label>
-        <label>
-          Password
-          <input
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            minLength={8}
-            placeholder="At least 8 characters"
-            required
-          />
-        </label>
+        <label>Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@company.com" required /></label>
+        <label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} placeholder="At least 8 characters" required /></label>
         {error && <p className="form-error">{error}</p>}
         {notice && <p className="muted">{notice}</p>}
-        <button className="primary-button auth-submit" disabled={busy || googleBusy}>
-          {busy ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}
-        </button>
+        <button className="primary-button auth-submit" disabled={busy || googleBusy}>{busy ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}</button>
       </form>
-
-      <div className="auth-divider" role="separator">
-        <span>or</span>
-      </div>
-
-      <button
-        type="button"
-        className="google-auth-button"
-        disabled={googleBusy || busy}
-        onClick={signInWithGoogle}
-      >
+      <div className="auth-divider" role="separator"><span>or</span></div>
+      <button type="button" className="google-auth-button" disabled={googleBusy || busy} onClick={signInWithGoogle}>
         <GoogleIcon />
-        <span>
-          {googleBusy
-            ? "Opening Google…"
-            : mode === "login"
-              ? "Continue with Google"
-              : "Create account with Google"}
-        </span>
+        <span>{googleBusy ? "Opening Google…" : mode === "login" ? "Continue with Google" : "Create account with Google"}</span>
       </button>
-
-      <p className="muted auth-switch">
-        {mode === "login" ? (
-          <>
-            New here? <Link href="/signup">Create an account</Link>
-          </>
-        ) : (
-          <>
-            Already registered? <Link href="/login">Sign in</Link>
-          </>
-        )}
-      </p>
+      <p className="muted auth-switch">{mode === "login" ? <>New here? <Link href="/signup">Create an account</Link></> : <>Already registered? <Link href="/login">Sign in</Link></>}</p>
     </section>
   );
 }
