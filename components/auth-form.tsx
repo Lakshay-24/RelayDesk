@@ -79,7 +79,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
         return;
       }
 
-      const redirectTo = `${window.location.origin}/login`;
+      const redirectTo = `${window.location.origin}/auth/callback?next=/onboarding`;
       const { data, error: authError } = await supabase.auth.signUp({
         email: email.trim(),
         password,
@@ -92,7 +92,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
       }
 
       if (!data.session) {
-        setNotice("Account created. Check your email and confirm your address, then sign in.");
+        setNotice("Account created. Confirm your email to continue directly to workspace setup.");
         return;
       }
 
