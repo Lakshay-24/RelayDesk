@@ -22,6 +22,21 @@ function appOrigin() {
   return window.location.origin;
 }
 
+function decodeOAuthValue(value: string | null) {
+  if (!value) return "";
+  let decoded = value.replace(/\+/g, " ");
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const next = decodeURIComponent(decoded);
+      if (next === decoded) break;
+      decoded = next;
+    } catch {
+      break;
+    }
+  }
+  return decoded;
+}
+
 export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -33,11 +48,19 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
 
   useEffect(() => {
     const search = new URLSearchParams(window.location.search);
-    const description = search.get("error_description");
-    const oauthError = description || search.get("error");
+    const description = decodeOAuthValue(search.get("error_description"));
+    const oauthError = description || decodeOAuthValue(search.get("error"));
     if (!oauthError) return;
-    const details = [search.get("error_code"), search.get("provider_error")].filter(Boolean);
-    setError(details.length ? `${oauthError} (${details.join(" · ")})` : oauthError);
+
+    const errorCode = decodeOAuthValue(search.get("error_code"));
+    const providerError = decodeOAuthValue(search.get("provider_error"));
+    const details = [errorCode, providerError].filter(Boolean);
+    const providerExchangeFailure = errorCode === "unexpected_failure" && /exchange external code/i.test(oauthError);
+    const readable = providerExchangeFailure
+      ? "Google sign-in reached Supabase, but Supabase could not exchange Google's authorization code. Check the Google provider credentials and the matching Supabase Auth Log event."
+      : oauthError;
+
+    setError(details.length ? `${readable} (${details.join(" · ")})` : readable);
   }, []);
 
   async function signInWithGoogle() {
@@ -97,7 +120,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
       <form className="form-stack" onSubmit={submit}>
         <label>Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@company.com" required /></label>
         <label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} placeholder="At least 8 characters" required /></label>
-        {error && <p className="form-error">{error}</p>}
+        {error && <p className="form-error" role="alert">{error}</p>}
         {notice && <p className="muted">{notice}</p>}
         <button className="primary-button auth-submit" disabled={busy || googleBusy}>{busy ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}</button>
       </form>
