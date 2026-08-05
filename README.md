@@ -1,58 +1,109 @@
 # RelayDesk
 
-A production-oriented Intercom-style support platform built for the Gigachad Builder assignment: multi-tenant authentication, unified live-chat/email inbox, embeddable messenger, knowledge base, AI summaries, team roles, and custom help domains.
+RelayDesk is a production-oriented Intercom-style customer-support platform built for the Gigachad Builder assignment. It combines a multi-tenant agent dashboard, embeddable realtime messenger, threaded support email, searchable knowledge base, AI assistance, custom help domains, SLA tracking, webhooks, analytics, and a scoped REST API.
+
+## Assignment coverage
+
+### Mandatory
+
+- Authentication, invitations, Admin/Agent roles, and agent assignment
+- One-script embeddable live chat
+- Realtime messages, typing, presence, read receipts, and persistent history
+- Unified chat/email inbox with filtering, assignment, snooze, resolve, and reopen
+- Threaded inbound/outbound email using Message-ID, In-Reply-To, and References
+- Knowledge-base CRUD, categories, rich-text controls, publishing, public search, and widget suggestions
+- Persisted AI issue summaries and AI reply drafts
+- Custom-domain ownership verification and host-based help-centre routing
+
+### Stand-out
+
+- Canned responses
+- Contact timeline and internal notes
+- Configurable SLA tracking and breach warnings
+- Signed webhooks with history and bounded retries
+- Scoped, revocable REST API keys
+- Workload, response-time, resolution, busiest-hour, channel, priority, and agent analytics
 
 ## Architecture
 
-- **Next.js App Router** for authenticated application, public widget and route handlers.
-- **Supabase Auth + PostgreSQL + RLS** for identity, tenant isolation and persistence.
-- **Supabase Realtime** for visitor/agent message delivery.
-- **Resend adapter** for outbound threaded email; provider-neutral inbound webhook.
-- **OpenAI adapter** for bounded, persisted conversation summaries.
-- **Vercel-compatible DNS verification** for custom help-centre domains.
+- **Next.js 15 App Router** for dashboard, public help centre, widget, REST API, and provider webhooks
+- **Supabase Auth + PostgreSQL + RLS** for identity, tenant isolation, persistence, and realtime
+- **Resend** for outbound and native inbound email retrieval
+- **Vercel AI Gateway** for bounded summaries and reply drafts with model fallback
+- **Vercel custom domains** for SSL provisioning after RelayDesk TXT verification
 
-The browser never receives the Supabase service-role key. Visitor traffic is restricted to narrow server endpoints using a workspace public key and per-browser visitor token. Authenticated agent access is additionally protected by PostgreSQL row-level security.
+The browser never receives the Supabase service-role key. Visitor traffic uses narrow workspace-public-key endpoints and a per-browser visitor token. Agent access is protected by authenticated route checks plus PostgreSQL RLS. API keys are stored only as SHA-256 hashes and are permanently scoped to one workspace.
 
-## Local setup
+## Setup
 
-1. Create a Supabase project and run migrations in `supabase/migrations` in numeric order.
-2. Copy `.env.example` to `.env.local` and fill the required values.
-3. Install dependencies with `npm install`.
-4. Run `npm run dev`.
-5. Sign up, create a workspace, and copy the messenger snippet from Settings.
-6. Optionally run `supabase/seed.sql` after onboarding.
+1. Create a Supabase project.
+2. Run every file in `supabase/migrations` in numeric order.
+3. Copy `.env.example` to `.env.local` and configure required values.
+4. Install dependencies with `npm install`.
+5. Run `npm run dev`.
+6. Sign up, create a workspace, and copy the messenger snippet from Settings.
 
-## Email webhook contract
+## Verification
 
-`POST /api/inbound/email` with header `x-webhook-secret` and JSON:
+Local build verification:
 
-```json
-{
-  "from": "Customer <customer@example.com>",
-  "to": "support-address@example.com",
-  "subject": "Question",
-  "text": "Can you help?",
-  "messageId": "<provider-message-id>",
-  "inReplyTo": "<optional-parent-id>",
-  "references": ["<optional-id>"]
-}
+```bash
+npm run verify
 ```
 
-Inbound delivery is authenticated, idempotent by Message-ID, normalized, HTML-stripped, and threaded through `In-Reply-To`/`References`.
+Deployment smoke checks:
 
-## Evaluator flow
+```bash
+RELAYDESK_BASE_URL=https://<deployment> npm run smoke
+```
 
-1. Create an account and workspace.
-2. Open Settings and install the messenger snippet on any HTML page.
-3. Send a visitor message; confirm it appears in Inbox without refreshing.
-4. Reply as the agent; confirm the visitor receives it live.
-5. Assign, resolve and reopen the conversation.
-6. Generate an AI summary.
-7. Create, save and publish a knowledge article.
-8. Invite a second account and accept using the invited email.
-9. Add a custom domain, publish the displayed DNS records and verify it.
-10. Forward or POST an inbound email and reply from the unified thread.
+Authenticated administrators can also run **Settings → Evaluator diagnostics**, which performs non-destructive checks against the deployed workspace, migration 005, SLA policy, API-key schema, inbox, knowledge base, inbound address, and optional provider configuration.
 
-## Honest limitations
+Detailed runbooks:
 
-Actual email delivery, AI generation, DNS propagation and Supabase Realtime require their respective external credentials/services. The repository does not fake successful provider results when configuration is absent.
+- [`docs/EVALUATOR.md`](docs/EVALUATOR.md)
+- [`docs/API.md`](docs/API.md)
+
+## Public REST API
+
+Create a scoped key in Settings and send it as:
+
+```http
+Authorization: Bearer rd_live_...
+```
+
+Implemented endpoints:
+
+- `GET /api/v1/conversations`
+- `GET /api/v1/conversations/:conversationId`
+- `PATCH /api/v1/conversations/:conversationId`
+- `GET /api/v1/contacts`
+- `GET /api/v1/messages`
+
+## Email routes
+
+- Generic normalized inbound provider: `POST /api/inbound/email`
+- Native signed Resend receiving: `POST /api/inbound/resend`
+- Resend delivery/bounce/delay events: `POST /api/email/events`
+
+Inbound delivery is authenticated, idempotent by Message-ID, HTML-normalized, and threaded through In-Reply-To and References. Outbound provider acceptance is not falsely presented as delivery; `delivered_at` is set only after the delivery webhook confirms it.
+
+## Webhook reliability
+
+RelayDesk signs outbound webhook bodies with HMAC-SHA256, stores every attempt, exposes delivery history, supports manual retry, and schedules bounded exponential retries. The protected worker endpoint is:
+
+```http
+POST /api/internal/webhook-retries
+Authorization: Bearer <CRON_SECRET>
+```
+
+## Honest external limitations
+
+The code and schema do not manufacture provider success. The following require real configuration and round-trip testing before being labelled operational:
+
+- Google OAuth provider exchange in Supabase
+- Resend sending/receiving domains and signed webhook events
+- Vercel project-domain registration and issued TLS certificate
+- AI Gateway credentials and live model response
+
+See the evaluator runbook for the exact evidence required for each external integration.
