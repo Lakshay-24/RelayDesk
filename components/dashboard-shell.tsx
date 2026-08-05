@@ -2,9 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpenText, Inbox, MessageSquareText, Settings } from "lucide-react";
+import { BarChart3, BookOpenText, Inbox, MessageSquareText, Settings } from "lucide-react";
 
-const items=[{href:"/inbox",label:"Inbox",icon:Inbox},{href:"/knowledge",label:"Knowledge",icon:BookOpenText},{href:"/settings",label:"Settings",icon:Settings}];
+const items=[
+  {href:"/inbox",label:"Inbox",icon:Inbox},
+  {href:"/knowledge",label:"Knowledge",icon:BookOpenText},
+  {href:"/analytics",label:"Analytics",icon:BarChart3},
+  {href:"/settings",label:"Settings",icon:Settings},
+];
 
 export function DashboardShell({children}:{children:React.ReactNode}){
   const pathname=usePathname();
