@@ -5,6 +5,7 @@ import { Check, Copy, Globe2, Mail, Trash2, UserPlus, Users } from "lucide-react
 import type { Membership, Workspace } from "@/types/domain";
 import { ApiAccessManager } from "@/components/settings/api-access-manager";
 import { CannedResponsesManager } from "@/components/settings/canned-responses-manager";
+import { DiagnosticsManager } from "@/components/settings/diagnostics-manager";
 import { WebhooksManager } from "@/components/settings/webhooks-manager";
 
 type Domain = { id: string; hostname: string; verification_token: string; status: string; verified_at: string | null };
@@ -105,6 +106,7 @@ export function SettingsWorkspace({ workspace, membership, initialDomains, inbou
     <section className="settings-page">
       <div className="page-title-row"><div><p className="eyebrow">{workspace.name}</p><h1>Settings</h1></div><span className="muted">{membership.role} · {visibleMemberCount} member{visibleMemberCount === 1 ? "" : "s"}</span></div>
       {notice && <div className="section-card">{notice}</div>}
+      <DiagnosticsManager isAdmin={isAdmin} />
       <div className="settings-grid">
         <div className="section-card"><h3><Copy size={16} /> Install messenger</h3><p className="muted">Paste this before the closing body tag on any site.</p><pre className="code-block">{snippet}</pre><button className="chip" onClick={() => navigator.clipboard.writeText(snippet)}>Copy snippet</button></div>
         <div className="section-card"><h3><Mail size={16} /> Email inbox</h3><p>Forward support mail to:</p><pre className="code-block">{inboundAddress || "Created automatically after workspace setup"}</pre><p className="muted">Generic webhook: <code>/api/inbound/email</code>. Native Resend receiving: <code>/api/inbound/resend</code>. Delivery events: <code>/api/email/events</code>.</p></div>
