@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { allowRequest, rateLimitHeaders } from "@/lib/rate-limit";
 
 const input = z.object({ conversationId: z.string().uuid() });
 
@@ -19,19 +20,31 @@ function extractText(payload: GatewayPayload): string | null {
 }
 
 export async function POST(request: Request) {
+  const requestId = crypto.randomUUID();
+  const respond = (body: unknown, init?: ResponseInit) => Response.json(body, {
+    ...init,
+    headers: { "x-request-id": requestId, ...(init?.headers ?? {}) },
+  });
+
   const parsed = input.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return Response.json({ error: "Invalid request" }, { status: 400 });
+  if (!parsed.success) return respond({ error: "Invalid request", requestId }, { status: 400 });
 
   const db = await createClient();
   const { data: { user } } = await db.auth.getUser();
-  if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  if (!user) return respond({ error: "Unauthorized", requestId }, { status: 401 });
+
+  const limited = allowRequest(`ai-reply:${user.id}`, 15, 60_000);
+  if (!limited.allowed) return respond(
+    { error: "AI draft limit reached. Please wait a minute and try again.", requestId },
+    { status: 429, headers: rateLimitHeaders(limited) },
+  );
 
   const { data: conversation } = await db
     .from("conversations")
     .select("id,workspace_id,subject,channel")
     .eq("id", parsed.data.conversationId)
     .maybeSingle();
-  if (!conversation) return Response.json({ error: "Conversation not found" }, { status: 404 });
+  if (!conversation) return respond({ error: "Conversation not found", requestId }, { status: 404, headers: rateLimitHeaders(limited) });
 
   const { data: membership } = await db
     .from("memberships")
@@ -39,7 +52,7 @@ export async function POST(request: Request) {
     .eq("workspace_id", conversation.workspace_id)
     .eq("user_id", user.id)
     .maybeSingle();
-  if (!membership) return Response.json({ error: "Forbidden" }, { status: 403 });
+  if (!membership) return respond({ error: "Forbidden", requestId }, { status: 403, headers: rateLimitHeaders(limited) });
 
   const [{ data: messages }, { data: articles }] = await Promise.all([
     db.from("messages")
@@ -54,19 +67,23 @@ export async function POST(request: Request) {
       .limit(8),
   ]);
 
-  if (!messages?.length) return Response.json({ error: "Conversation is empty" }, { status: 404 });
+  if (!messages?.length) return respond({ error: "Conversation is empty", requestId }, { status: 404, headers: rateLimitHeaders(limited) });
   const apiKey = process.env.AI_GATEWAY_API_KEY;
-  if (!apiKey) return Response.json({ error: "AI replies are not configured" }, { status: 503 });
+  if (!apiKey) return respond({ error: "AI replies are not configured", requestId }, { status: 503, headers: rateLimitHeaders(limited) });
 
   const transcript = messages.map((message) => `${message.sender_type}: ${message.body}`).join("\n");
-  const knowledge = (articles ?? []).map((article) => `${article.title}: ${article.excerpt ?? article.body_html?.replace(/<[^>]*>/g, " ").slice(0, 500) ?? ""}`).join("\n");
+  const knowledge = (articles ?? [])
+    .map((article) => `${article.title}: ${article.excerpt ?? article.body_html?.replace(/<[^>]*>/g, " ").slice(0, 500) ?? ""}`)
+    .join("\n");
+  const preferredModel = process.env.AI_GATEWAY_MODEL || "openai/gpt-5.4-mini";
 
   try {
     const response = await fetch("https://ai-gateway.vercel.sh/v1/responses", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(20_000),
       body: JSON.stringify({
-        model: process.env.AI_GATEWAY_MODEL || "openai/gpt-5.4-mini",
+        model: preferredModel,
         input: [{
           type: "message",
           role: "user",
@@ -74,23 +91,22 @@ export async function POST(request: Request) {
         }],
         temperature: 0.2,
         max_output_tokens: 350,
-        providerOptions: { gateway: { models: [
-          process.env.AI_GATEWAY_MODEL || "openai/gpt-5.4-mini",
-          "google/gemini-3.1-flash-lite-preview",
-          "anthropic/claude-haiku-4.5",
-        ] } },
+        providerOptions: { gateway: { models: [preferredModel, "google/gemini-3.1-flash-lite-preview", "anthropic/claude-haiku-4.5"] } },
       }),
     });
-    const payload = await response.json() as GatewayPayload;
+
+    const payload = await response.json().catch(() => ({})) as GatewayPayload;
     if (!response.ok) {
-      console.error("AI Gateway reply draft failed", payload);
-      return Response.json({ error: "AI reply temporarily unavailable" }, { status: 503 });
+      console.error("AI Gateway reply draft failed", { requestId, status: response.status });
+      return respond({ error: "AI reply temporarily unavailable", requestId }, { status: 503, headers: rateLimitHeaders(limited) });
     }
+
     const draft = extractText(payload);
-    if (!draft) return Response.json({ error: "AI reply was empty" }, { status: 502 });
-    return Response.json({ draft });
+    if (!draft) return respond({ error: "AI reply was empty", requestId }, { status: 502, headers: rateLimitHeaders(limited) });
+    return respond({ draft, requestId }, { headers: rateLimitHeaders(limited) });
   } catch (error) {
-    console.error("AI Gateway reply draft failed", error);
-    return Response.json({ error: "AI reply temporarily unavailable" }, { status: 503 });
+    const timedOut = error instanceof DOMException && error.name === "TimeoutError";
+    console.error("AI Gateway reply draft failed", { requestId, timedOut });
+    return respond({ error: timedOut ? "AI reply timed out. Please try again." : "AI reply temporarily unavailable", requestId }, { status: 503, headers: rateLimitHeaders(limited) });
   }
 }
