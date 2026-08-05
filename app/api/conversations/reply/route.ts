@@ -20,7 +20,6 @@ export async function POST(request:Request){
 
  const admin=createAdminClient();
  let externalMessageId:string|undefined;
- let deliveredAt:string|null=null;
  let inReplyTo:string|null=null;
  if(conversation.channel==="email"){
   const contact=Array.isArray(conversation.contacts)?conversation.contacts[0]:conversation.contacts;
@@ -31,16 +30,23 @@ export async function POST(request:Request){
   inReplyTo=references.at(-1)??null;
   const from=process.env.OUTBOUND_EMAIL_FROM??`${workspace?.name??"RelayDesk"} <support@${process.env.INBOUND_EMAIL_DOMAIN??"example.com"}>`;
   try{
-   const sent=await sendEmail({to:contact.email,from,subject:`Re: ${conversation.subject??"Support request"}`,text:parsed.data.body,headers:inReplyTo?{"In-Reply-To":inReplyTo,"References":references.join(" ")}:undefined});
-   externalMessageId=sent.id;deliveredAt=new Date().toISOString();
+   const sent=await sendEmail({
+    to:contact.email,
+    from,
+    subject:`Re: ${conversation.subject??"Support request"}`,
+    text:parsed.data.body,
+    headers:inReplyTo?{"In-Reply-To":inReplyTo,"References":references.join(" ")}:undefined,
+    idempotencyKey:`relaydesk-${conversation.id}-${membership.id}-${crypto.randomUUID()}`,
+   });
+   externalMessageId=sent.id;
   }catch(error){
-   console.error("Outbound support email failed",error);
+   console.error("Outbound support email failed",{conversationId:conversation.id,message:error instanceof Error?error.message:"Email delivery failed"});
    return NextResponse.json({error:error instanceof Error?error.message:"Email delivery failed"},{status:502});
   }
  }
 
  const now=new Date().toISOString();
- const {data:message,error}=await admin.from("messages").insert({workspace_id:conversation.workspace_id,conversation_id:conversation.id,sender_type:"agent",sender_membership_id:membership.id,channel:conversation.channel,body:parsed.data.body,external_message_id:externalMessageId,in_reply_to:inReplyTo,delivered_at:deliveredAt}).select().single();
+ const {data:message,error}=await admin.from("messages").insert({workspace_id:conversation.workspace_id,conversation_id:conversation.id,sender_type:"agent",sender_membership_id:membership.id,channel:conversation.channel,body:parsed.data.body,external_message_id:externalMessageId,in_reply_to:inReplyTo,delivered_at:null}).select().single();
  if(error)return NextResponse.json({error:error.message},{status:500});
  await admin.from("conversations").update({last_message_at:now,updated_at:now,status:"open"}).eq("id",conversation.id);
  if(conversation.channel==="chat")await admin.channel(`conversation:${conversation.id}`).send({type:"broadcast",event:"message",payload:message});
