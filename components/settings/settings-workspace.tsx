@@ -21,6 +21,8 @@ export function SettingsWorkspace({workspace,membership,initialDomains,inboundAd
   const [email,setEmail]=useState("");
   const [inviteRole,setInviteRole]=useState<"admin"|"agent">("agent");
   const [notice,setNotice]=useState<Notice>(null);
+  const [inviteNotice,setInviteNotice]=useState<Notice>(null);
+  const [teamNotice,setTeamNotice]=useState<Notice>(null);
   const [members,setMembers]=useState<TeamMember[]>([]);
   const [invitations,setInvitations]=useState<Invitation[]>([]);
   const [action,setAction]=useState("");
@@ -37,7 +39,7 @@ export function SettingsWorkspace({workspace,membership,initialDomains,inboundAd
 
   async function loadTeam(){
     try{const json=await jsonRequest(`/api/team/members?workspaceId=${encodeURIComponent(workspace.id)}`,{cache:"no-store"});setMembers(json.members??[]);setInvitations(json.invitations??[]);}
-    catch(error){setNotice({tone:"error",text:error instanceof Error?error.message:"Could not load team"});}
+    catch(error){setTeamNotice({tone:"error",text:error instanceof Error?error.message:"Could not load team"});}
   }
   useEffect(()=>{void loadTeam();},[workspace.id]);
 
@@ -48,20 +50,28 @@ export function SettingsWorkspace({workspace,membership,initialDomains,inboundAd
     finally{setAction("");}
   }
 
-  function invite(){void run("invite",async()=>{
+  async function runLocal(key:string,target:"invite"|"team",work:()=>Promise<void>){
+    if(action)return;
+    const setter=target==="invite"?setInviteNotice:setTeamNotice;
+    setAction(key);setter({tone:"info",text:"Working…"});
+    try{await work();}catch(error){setter({tone:"error",text:error instanceof Error?error.message:"Something went wrong"});}
+    finally{setAction("");}
+  }
+
+  function invite(){void runLocal("invite","invite",async()=>{
     const json=await jsonRequest("/api/team/invite",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({workspaceId:workspace.id,email:email.trim(),role:inviteRole})});
-    setEmail("");await loadTeam();setNotice({tone:"success",text:json.message??"Invitation created."});
+    setEmail("");await loadTeam();setInviteNotice({tone:"success",text:json.message??"Invitation created."});
   });}
 
-  function changeMember(membershipId:string,role:"admin"|"agent"){void run(`member-${membershipId}`,async()=>{
+  function changeMember(membershipId:string,role:"admin"|"agent"){void runLocal(`member-${membershipId}`,"team",async()=>{
     const previous=members;setMembers(current=>current.map(member=>member.id===membershipId?{...member,role}:member));
-    try{const json=await jsonRequest("/api/team/members",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({workspaceId:workspace.id,membershipId,role,action:"update"})});setNotice({tone:"success",text:json.unchanged?"Member already has that role.":"Member role updated."});}
+    try{const json=await jsonRequest("/api/team/members",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({workspaceId:workspace.id,membershipId,role,action:"update"})});setTeamNotice({tone:"success",text:json.unchanged?"Member already has that role.":"Member role updated."});}
     catch(error){setMembers(previous);throw error;}
   });}
 
-  function removeMember(membershipId:string){void run(`member-${membershipId}`,async()=>{
+  function removeMember(membershipId:string){void runLocal(`member-${membershipId}`,"team",async()=>{
     await jsonRequest("/api/team/members",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({workspaceId:workspace.id,membershipId,action:"remove"})});
-    setMembers(current=>current.filter(member=>member.id!==membershipId));setNotice({tone:"success",text:"Member removed."});
+    setMembers(current=>current.filter(member=>member.id!==membershipId));setTeamNotice({tone:"success",text:"Member removed."});
   });}
 
   function addDomain(){void run("domain-new",async()=>{
@@ -88,6 +98,8 @@ export function SettingsWorkspace({workspace,membership,initialDomains,inboundAd
 
   const visibleMemberCount=members.length||memberCount;
   const pendingInvitations=invitations.filter(item=>item.status==="pending");
+  const adminCount=members.filter(member=>member.role==="admin").length;
+  const inlineNotice=(value:Notice)=>value?<div className={`card-notice ${value.tone==="error"?"form-error":value.tone==="success"?"form-success":""}`} role="status">{value.text}</div>:null;
 
   return <section className="settings-page">
     <div className="page-title-row"><div><p className="eyebrow">{workspace.name}</p><h1>Settings</h1></div><span className="muted">{membership.role} · {visibleMemberCount} member{visibleMemberCount===1?"":"s"}</span></div>
@@ -106,16 +118,18 @@ export function SettingsWorkspace({workspace,membership,initialDomains,inboundAd
 
       <div className="section-card">
         <h3><UserPlus size={16}/>Invite teammate</h3><p className="muted">A person may belong to multiple RelayDesk workspaces. Existing users receive the invitation inside the workspace switcher even when Supabase does not send another signup email.</p>
-        <label>Email<input type="email" value={email} disabled={busy("invite")} onChange={event=>setEmail(event.target.value)} placeholder="agent@company.com"/></label>
+        <label>Email<input type="email" value={email} disabled={busy("invite")} onChange={event=>{setEmail(event.target.value);setInviteNotice(null)}} placeholder="agent@company.com"/></label>
         <label>Role<select value={inviteRole} disabled={busy("invite")} onChange={event=>setInviteRole(event.target.value as "admin"|"agent")}><option value="agent">Agent</option><option value="admin">Admin</option></select></label>
         <button className="primary-button" aria-busy={busy("invite")} disabled={Boolean(action)||!email.trim()||!isAdmin} onClick={invite}>{busy("invite")?"Sending invite…":"Send invite"}</button>
+        {inlineNotice(inviteNotice)}
         <div className="invite-summary"><span>{pendingInvitations.length} pending</span><span>{invitations.filter(item=>item.status==="accepted").length} accepted</span><span>{invitations.filter(item=>item.status==="expired").length} expired</span></div>
         {invitations.length>0&&<div className="invite-history"><h4>Invitation status</h4>{invitations.map(item=><div key={item.id} className="invite-status-row"><span><strong>{item.email}</strong><small>{item.role} · created {new Date(item.created_at).toLocaleDateString()}</small></span><span className={`status-pill ${item.status}`}>{item.status}</span></div>)}</div>}
       </div>
 
       <div className="section-card">
         <h3><Users size={16}/>Team</h3>
-        {members.map(member=><div key={member.id} className="team-row"><div><strong>{member.name||member.email||"Team member"}</strong><p className="muted">{member.email||"No email"} · <span className="active-member">Active</span></p></div><select disabled={!isAdmin||Boolean(action)} value={member.role} onChange={event=>changeMember(member.id,event.target.value as "admin"|"agent")}><option value="admin">Admin</option><option value="agent">Agent</option></select>{isAdmin&&member.id!==membership.id&&<button className="chip" aria-busy={busy(`member-${member.id}`)} disabled={Boolean(action)} onClick={()=>removeMember(member.id)}><Trash2 size={14}/>{busy(`member-${member.id}`)?"Removing…":"Remove"}</button>}</div>)}
+        {teamNotice&&inlineNotice(teamNotice)}
+        {members.map(member=>{const onlyAdmin=member.role==="admin"&&adminCount<=1;return <div key={member.id} className="team-row"><div><strong>{member.name||member.email||"Team member"}</strong><p className="muted">{member.email||"No email"} · <span className="active-member">Active</span>{onlyAdmin?" · only admin":""}</p></div><select title={onlyAdmin?"Promote another member before changing the only admin":"Change member role"} disabled={!isAdmin||Boolean(action)||onlyAdmin} value={member.role} onChange={event=>{setTeamNotice(null);changeMember(member.id,event.target.value as "admin"|"agent")}}><option value="admin">Admin</option><option value="agent">Agent</option></select>{isAdmin&&member.id!==membership.id&&<button className="chip" aria-busy={busy(`member-${member.id}`)} disabled={Boolean(action)||onlyAdmin} onClick={()=>{setTeamNotice(null);removeMember(member.id)}}><Trash2 size={14}/>{busy(`member-${member.id}`)?"Removing…":"Remove"}</button>}</div>})}
         {!members.length&&<p className="muted">Loading team…</p>}
       </div>
 
@@ -127,20 +141,11 @@ export function SettingsWorkspace({workspace,membership,initialDomains,inboundAd
         <div className="domain-flow"><span>1. Enter subdomain</span><span>2. Add TXT + CNAME</span><span>3. Verify and open HTTPS</span></div>
         <label>Help-centre hostname<input value={hostname} disabled={busy("domain-new")} onChange={event=>setHostname(event.target.value.toLowerCase().trim())} placeholder="help.company.com"/></label>
         <button className="primary-button" aria-busy={busy("domain-new")} disabled={!isAdmin||Boolean(action)||!hostname.trim()} onClick={addDomain}>{busy("domain-new")?"Registering domain…":"Connect domain"}</button>
-        {domains.map(domain=><div key={domain.id} className="section-card domain-card">
-          <div className="domain-heading"><strong>{domain.hostname}</strong><span className={`domain-status ${domain.status}`}>{domain.status==="pending"?"Pending DNS":domain.status}</span></div>
-          <p><strong>Ownership record</strong><br/><code>TXT _relaydesk.{domain.hostname}</code><br/><code>{domain.verification_token}</code></p>
-          <p><strong>Traffic record</strong><br/><code>CNAME {domain.hostname}</code><br/><code>{process.env.NEXT_PUBLIC_CUSTOM_DOMAIN_CNAME_TARGET||"cname.vercel-dns.com"}</code></p>
-          <p className="muted"><ShieldCheck size={14}/> RelayDesk registers verified hostnames with hosting and HTTPS is provisioned automatically.</p>
-          <div className="filters">
-            <button className="chip" aria-busy={busy(`domain-${domain.id}`)} disabled={Boolean(action)||domain.status==="verified"} onClick={()=>verify(domain)}>{domain.status==="verified"?<><Check size={14}/>HTTPS ready</>:busy(`domain-${domain.id}`)?"Checking DNS…":"Check DNS"}</button>
-            <button className="chip danger-chip" disabled={Boolean(action)||!isAdmin} onClick={()=>removeDomain(domain)}><Trash2 size={14}/>{busy(`domain-${domain.id}`)?"Removing…":"Remove"}</button>
-          </div>
-        </div>)}
+        {domains.map(domain=><div key={domain.id} className="section-card domain-card"><div className="domain-heading"><strong>{domain.hostname}</strong><span className={`domain-status ${domain.status}`}>{domain.status==="pending"?"Pending DNS":domain.status}</span></div><p><strong>Ownership record</strong><br/><code>TXT _relaydesk.{domain.hostname}</code><br/><code>{domain.verification_token}</code></p><p><strong>Traffic record</strong><br/><code>CNAME {domain.hostname}</code><br/><code>{process.env.NEXT_PUBLIC_CUSTOM_DOMAIN_CNAME_TARGET||"cname.vercel-dns.com"}</code></p><p className="muted"><ShieldCheck size={14}/> RelayDesk registers verified hostnames with hosting and HTTPS is provisioned automatically.</p><div className="filters"><button className="chip" aria-busy={busy(`domain-${domain.id}`)} disabled={Boolean(action)||domain.status==="verified"} onClick={()=>verify(domain)}>{domain.status==="verified"?<><Check size={14}/>HTTPS ready</>:busy(`domain-${domain.id}`)?"Checking DNS…":"Check DNS"}</button><button className="chip danger-chip" disabled={Boolean(action)||!isAdmin} onClick={()=>removeDomain(domain)}><Trash2 size={14}/>{busy(`domain-${domain.id}`)?"Removing…":"Remove"}</button></div></div>)}
       </div>
     </div>
     <style jsx>{`
-      .setup-warning,.setup-success{display:flex;gap:12px;padding:14px;border-radius:12px;margin:12px 0}.setup-warning{border:1px solid #f2c94c;background:#fff9df}.setup-warning svg{color:#9a6700}.setup-success{border:1px solid #8dd89a;background:#edf9ef}.setup-success svg{color:#187b33}.setup-warning svg,.setup-success svg{flex:0 0 auto}.setup-warning p,.setup-success p{margin:4px 0 0;line-height:1.5}.invite-summary{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}.invite-summary span,.status-pill{padding:5px 8px;border-radius:999px;background:#eee;font-size:11px;font-weight:800;text-transform:capitalize}.invite-history{display:grid;gap:8px}.invite-status-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-top:1px solid #eee}.invite-status-row span:first-child{display:grid;gap:3px}.invite-status-row small{color:#777}.status-pill.pending{background:#fff7d6;color:#7a5900}.status-pill.accepted{background:#e8f7eb;color:#176b2c}.status-pill.expired{background:#f1f1f1;color:#666}.active-member{color:#176b2c;font-weight:700}.domain-flow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:14px 0}.domain-flow span{padding:9px;border-radius:9px;background:#f5f5f1;font-size:12px;font-weight:700}.domain-heading{display:flex;justify-content:space-between;align-items:center;gap:12px}.domain-status{padding:4px 8px;border-radius:999px;background:#eee;font-size:11px;font-weight:800;text-transform:uppercase}.domain-status.verified{background:#e8f7eb;color:#176b2c}.domain-status.failed{background:#fff0ee;color:#b42318}.domain-status.pending{background:#fff7d6;color:#7a5900}.domain-card code{overflow-wrap:anywhere}.domain-card .muted{display:flex;align-items:flex-start;gap:6px}@media(max-width:720px){.domain-flow{grid-template-columns:1fr}.invite-status-row{align-items:flex-start;flex-direction:column}}
+      .setup-warning,.setup-success{display:flex;gap:12px;padding:14px;border-radius:12px;margin:12px 0}.setup-warning{border:1px solid #f2c94c;background:#fff9df}.setup-warning svg{color:#9a6700}.setup-success{border:1px solid #8dd89a;background:#edf9ef}.setup-success svg{color:#187b33}.setup-warning svg,.setup-success svg{flex:0 0 auto}.setup-warning p,.setup-success p{margin:4px 0 0;line-height:1.5}.card-notice{margin:12px 0;padding:10px 12px;border-radius:10px;background:#f5f5f1;font-size:13px}.invite-summary{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}.invite-summary span,.status-pill{padding:5px 8px;border-radius:999px;background:#eee;font-size:11px;font-weight:800;text-transform:capitalize}.invite-history{display:grid;gap:8px}.invite-status-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-top:1px solid #eee}.invite-status-row span:first-child{display:grid;gap:3px}.invite-status-row small{color:#777}.status-pill.pending{background:#fff7d6;color:#7a5900}.status-pill.accepted{background:#e8f7eb;color:#176b2c}.status-pill.expired{background:#f1f1f1;color:#666}.active-member{color:#176b2c;font-weight:700}.domain-flow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:14px 0}.domain-flow span{padding:9px;border-radius:9px;background:#f5f5f1;font-size:12px;font-weight:700}.domain-heading{display:flex;justify-content:space-between;align-items:center;gap:12px}.domain-status{padding:4px 8px;border-radius:999px;background:#eee;font-size:11px;font-weight:800;text-transform:uppercase}.domain-status.verified{background:#e8f7eb;color:#176b2c}.domain-status.failed{background:#fff0ee;color:#b42318}.domain-status.pending{background:#fff7d6;color:#7a5900}.domain-card code{overflow-wrap:anywhere}.domain-card .muted{display:flex;align-items:flex-start;gap:6px}@media(max-width:720px){.domain-flow{grid-template-columns:1fr}.invite-status-row{align-items:flex-start;flex-direction:column}}
     `}</style>
   </section>;
 }
