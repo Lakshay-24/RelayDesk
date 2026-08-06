@@ -1,6 +1,7 @@
 import "./globals.css";
 import "./responsive.css";
 import "./ux-polish.css";
+import "./inbox-polish.css";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
