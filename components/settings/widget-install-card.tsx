@@ -12,7 +12,7 @@ type Props = {
 export function WidgetInstallCard({ appUrl, workspaceKey, onNotice }: Props) {
   const [copied, setCopied] = useState(false);
   const snippet = `<script src="${appUrl}/widget/loader.js" data-workspace="${workspaceKey}" async></script>`;
-  const demoUrl = `${appUrl}/widget?workspace=${encodeURIComponent(workspaceKey)}`;
+  const demoUrl = `${appUrl}/widget-demo?workspace=${encodeURIComponent(workspaceKey)}`;
 
   async function copySnippet() {
     try {
@@ -28,10 +28,10 @@ export function WidgetInstallCard({ appUrl, workspaceKey, onNotice }: Props) {
   return (
     <div className="section-card widget-install-card">
       <h3><MessageSquareText size={17}/>Website chat widget</h3>
-      <p className="muted">This is the customer chat bubble. Test it instantly or add one script tag to any website.</p>
+      <p className="muted">This is the customer chat bubble. Test it on a real webpage or add one script tag to any website.</p>
       <ol className="widget-steps">
-        <li>Open the live demo and send a customer message.</li>
-        <li>Return to Inbox; the conversation should appear.</li>
+        <li>Open the public demo page and click the floating chat button.</li>
+        <li>Send a customer message, then return to Inbox.</li>
         <li>For a real site, paste this script before <code>&lt;/body&gt;</code>.</li>
       </ol>
       <pre className="code-block">{snippet}</pre>
@@ -40,10 +40,10 @@ export function WidgetInstallCard({ appUrl, workspaceKey, onNotice }: Props) {
           <Copy size={14}/>{copied ? "Copied" : "Copy install script"}
         </button>
         <a className="primary-button" href={demoUrl} target="_blank" rel="noreferrer">
-          <ExternalLink size={15}/>Test live chat
+          <ExternalLink size={15}/>Open bubble demo
         </a>
       </div>
-      <p className="muted widget-hint">The demo opens as a visitor in a new tab. Keep RelayDesk Inbox open in this tab.</p>
+      <p className="muted widget-hint">The demo is a public webpage using this exact embed script and your current workspace key.</p>
     </div>
   );
 }

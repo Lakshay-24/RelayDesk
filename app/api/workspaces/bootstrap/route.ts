@@ -17,22 +17,6 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Your session expired. Sign in again." }, { status: 401 });
 
-  const { data: existingMembership, error: membershipError } = await supabase
-    .from("memberships")
-    .select("workspace_id,workspaces(id,name,slug,public_key)")
-    .eq("user_id", user.id)
-    .limit(1)
-    .maybeSingle();
-
-  if (membershipError) {
-    console.error("Workspace bootstrap membership lookup failed", { userId: user.id, message: membershipError.message });
-    return NextResponse.json({ error: "Could not check your workspace. Please try again." }, { status: 500 });
-  }
-
-  if (existingMembership?.workspaces) {
-    return NextResponse.json({ workspace: existingMembership.workspaces, existing: true });
-  }
-
   const { data, error } = await supabase.rpc("create_workspace_with_admin", {
     workspace_name: parsed.data.name,
     workspace_slug: parsed.data.slug,
@@ -46,5 +30,19 @@ export async function POST(request: Request) {
     );
   }
 
-  return NextResponse.json({ workspace: data, existing: false });
+  const workspace = Array.isArray(data) ? data[0] : data;
+  const workspaceId = workspace && typeof workspace === "object" && "id" in workspace ? String(workspace.id) : null;
+  if (!workspaceId) {
+    return NextResponse.json({ error: "Workspace was created but could not be selected. Please open it from Workspaces." }, { status: 500 });
+  }
+
+  const response = NextResponse.json({ workspace, existing: false });
+  response.cookies.set("relaydesk_workspace", workspaceId, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 365,
+  });
+  return response;
 }
