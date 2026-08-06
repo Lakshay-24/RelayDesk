@@ -4,12 +4,13 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const mutationSchema = z.object({
+  workspaceId: z.string().uuid(),
   membershipId: z.string().uuid(),
   role: z.enum(["admin", "agent"]).optional(),
   action: z.enum(["update", "remove"]),
 });
 
-async function getAdminContext() {
+async function getWorkspaceContext(workspaceId: string) {
   const db = await createClient();
   const { data: { user } } = await db.auth.getUser();
   if (!user) return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
@@ -18,25 +19,28 @@ async function getAdminContext() {
     .from("memberships")
     .select("id,workspace_id,role")
     .eq("user_id", user.id)
-    .order("created_at")
-    .limit(1)
+    .eq("workspace_id", workspaceId)
     .maybeSingle();
 
-  if (!membership) return { error: NextResponse.json({ error: "Workspace not found" }, { status: 404 }) };
+  if (!membership) return { error: NextResponse.json({ error: "You do not have access to this workspace." }, { status: 403 }) };
   return { db, user, membership };
 }
 
-export async function GET() {
-  const context = await getAdminContext();
-  if ("error" in context) return context.error;
+export async function GET(request: Request) {
+  const workspaceId = new URL(request.url).searchParams.get("workspaceId");
+  if (!workspaceId || !z.string().uuid().safeParse(workspaceId).success) {
+    return NextResponse.json({ error: "Invalid workspace." }, { status: 400 });
+  }
 
+  const context = await getWorkspaceContext(workspaceId);
+  if ("error" in context) return context.error;
   const { db, membership } = context;
+
   const { data: members, error } = await db
     .from("memberships")
     .select("id,user_id,role,created_at")
-    .eq("workspace_id", membership.workspace_id)
+    .eq("workspace_id", workspaceId)
     .order("created_at");
-
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const admin = createAdminClient();
@@ -46,59 +50,69 @@ export async function GET() {
       ...member,
       email: data.user?.email ?? null,
       name: data.user?.user_metadata?.full_name ?? data.user?.user_metadata?.name ?? null,
+      status: "active" as const,
     };
   }));
 
-  const { data: invitations } = await db
+  const { data: invitations, error: invitationError } = await db
     .from("invitations")
     .select("id,email,role,expires_at,accepted_at,created_at")
-    .eq("workspace_id", membership.workspace_id)
-    .is("accepted_at", null)
-    .gt("expires_at", new Date().toISOString())
-    .order("created_at", { ascending: false });
+    .eq("workspace_id", workspaceId)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (invitationError) return NextResponse.json({ error: invitationError.message }, { status: 500 });
 
-  return NextResponse.json({ members: enriched, invitations: invitations ?? [], currentMembershipId: membership.id });
+  const now = Date.now();
+  const inviteRows = (invitations ?? []).map((invite) => ({
+    ...invite,
+    status: invite.accepted_at ? "accepted" : new Date(invite.expires_at).getTime() <= now ? "expired" : "pending",
+  }));
+
+  return NextResponse.json({ members: enriched, invitations: inviteRows, currentMembershipId: membership.id });
 }
 
 export async function PATCH(request: Request) {
   const parsed = mutationSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "Invalid team change" }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: "Invalid team change." }, { status: 400 });
 
-  const context = await getAdminContext();
+  const context = await getWorkspaceContext(parsed.data.workspaceId);
   if ("error" in context) return context.error;
   const { db, membership } = context;
-  if (membership.role !== "admin") return NextResponse.json({ error: "Only admins can manage the team" }, { status: 403 });
+  if (membership.role !== "admin") return NextResponse.json({ error: "Only admins can manage this team." }, { status: 403 });
 
   const { data: target } = await db
     .from("memberships")
     .select("id,workspace_id,role")
     .eq("id", parsed.data.membershipId)
-    .eq("workspace_id", membership.workspace_id)
+    .eq("workspace_id", parsed.data.workspaceId)
     .maybeSingle();
-  if (!target) return NextResponse.json({ error: "Team member not found" }, { status: 404 });
+  if (!target) return NextResponse.json({ error: "Team member not found in this workspace." }, { status: 404 });
 
   const { count: adminCount } = await db
     .from("memberships")
     .select("id", { count: "exact", head: true })
-    .eq("workspace_id", membership.workspace_id)
+    .eq("workspace_id", parsed.data.workspaceId)
     .eq("role", "admin");
 
   if (target.role === "admin" && (adminCount ?? 0) <= 1 && (parsed.data.action === "remove" || parsed.data.role === "agent")) {
-    return NextResponse.json({ error: "A workspace must keep at least one admin" }, { status: 400 });
+    return NextResponse.json({ error: "Promote another admin before changing or removing the last admin." }, { status: 400 });
   }
 
   if (parsed.data.action === "remove") {
-    if (target.id === membership.id) return NextResponse.json({ error: "You cannot remove yourself" }, { status: 400 });
-    const { error } = await db.from("memberships").delete().eq("id", target.id);
+    if (target.id === membership.id) return NextResponse.json({ error: "You cannot remove yourself from here." }, { status: 400 });
+    const { error } = await db.from("memberships").delete().eq("id", target.id).eq("workspace_id", parsed.data.workspaceId);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ ok: true });
   }
 
-  if (!parsed.data.role) return NextResponse.json({ error: "Role is required" }, { status: 400 });
+  if (!parsed.data.role) return NextResponse.json({ error: "Choose a role." }, { status: 400 });
+  if (target.role === parsed.data.role) return NextResponse.json({ member: { id: target.id, role: target.role }, unchanged: true });
+
   const { data: updated, error } = await db
     .from("memberships")
     .update({ role: parsed.data.role })
     .eq("id", target.id)
+    .eq("workspace_id", parsed.data.workspaceId)
     .select("id,role")
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

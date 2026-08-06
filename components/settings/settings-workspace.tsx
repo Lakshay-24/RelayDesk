@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertTriangle, Check, Globe2, Mail, ShieldCheck, Trash2, UserPlus, Users } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, Globe2, Mail, ShieldCheck, Trash2, UserPlus, Users } from "lucide-react";
 import type { Membership, Workspace } from "@/types/domain";
 import { ApiAccessManager } from "@/components/settings/api-access-manager";
 import { CannedResponsesManager } from "@/components/settings/canned-responses-manager";
@@ -10,12 +10,12 @@ import { WebhooksManager } from "@/components/settings/webhooks-manager";
 import { WidgetInstallCard } from "@/components/settings/widget-install-card";
 
 type Domain={id:string;hostname:string;verification_token:string;status:string;verified_at:string|null};
-type TeamMember={id:string;user_id:string;role:"admin"|"agent";created_at:string;email:string|null;name:string|null};
-type Invitation={id:string;email:string;role:"admin"|"agent";expires_at:string;accepted_at:string|null;created_at:string};
-type Props={workspace:Workspace;membership:Membership;initialDomains:Domain[];inboundAddress:string|null;memberCount:number};
+type TeamMember={id:string;user_id:string;role:"admin"|"agent";created_at:string;email:string|null;name:string|null;status?:"active"};
+type Invitation={id:string;email:string;role:"admin"|"agent";expires_at:string;accepted_at:string|null;created_at:string;status:"pending"|"accepted"|"expired"};
+type Props={workspace:Workspace;membership:Membership;initialDomains:Domain[];inboundAddress:string|null;inboundConnected:boolean;memberCount:number};
 type Notice={tone:"success"|"error"|"info";text:string}|null;
 
-export function SettingsWorkspace({workspace,membership,initialDomains,inboundAddress,memberCount}:Props){
+export function SettingsWorkspace({workspace,membership,initialDomains,inboundAddress,inboundConnected,memberCount}:Props){
   const [domains,setDomains]=useState(initialDomains);
   const [hostname,setHostname]=useState("");
   const [email,setEmail]=useState("");
@@ -36,10 +36,10 @@ export function SettingsWorkspace({workspace,membership,initialDomains,inboundAd
   }
 
   async function loadTeam(){
-    try{const json=await jsonRequest("/api/team/members",{cache:"no-store"});setMembers(json.members??[]);setInvitations(json.invitations??[]);}
+    try{const json=await jsonRequest(`/api/team/members?workspaceId=${encodeURIComponent(workspace.id)}`,{cache:"no-store"});setMembers(json.members??[]);setInvitations(json.invitations??[]);}
     catch(error){setNotice({tone:"error",text:error instanceof Error?error.message:"Could not load team"});}
   }
-  useEffect(()=>{void loadTeam();},[]);
+  useEffect(()=>{void loadTeam();},[workspace.id]);
 
   async function run(key:string,work:()=>Promise<void>){
     if(action)return;
@@ -50,18 +50,18 @@ export function SettingsWorkspace({workspace,membership,initialDomains,inboundAd
 
   function invite(){void run("invite",async()=>{
     const json=await jsonRequest("/api/team/invite",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({workspaceId:workspace.id,email:email.trim(),role:inviteRole})});
-    setEmail("");await loadTeam();setNotice({tone:"success",text:json.message??"Invitation accepted for delivery. Ask the recipient to check Inbox and Spam."});
+    setEmail("");await loadTeam();setNotice({tone:"success",text:json.message??"Invitation created."});
   });}
 
   function changeMember(membershipId:string,role:"admin"|"agent"){void run(`member-${membershipId}`,async()=>{
     const previous=members;setMembers(current=>current.map(member=>member.id===membershipId?{...member,role}:member));
-    try{await jsonRequest("/api/team/members",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({membershipId,role,action:"update"})});setNotice({tone:"success",text:"Member role updated"});}
+    try{const json=await jsonRequest("/api/team/members",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({workspaceId:workspace.id,membershipId,role,action:"update"})});setNotice({tone:"success",text:json.unchanged?"Member already has that role.":"Member role updated."});}
     catch(error){setMembers(previous);throw error;}
   });}
 
   function removeMember(membershipId:string){void run(`member-${membershipId}`,async()=>{
-    await jsonRequest("/api/team/members",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({membershipId,action:"remove"})});
-    setMembers(current=>current.filter(member=>member.id!==membershipId));setNotice({tone:"success",text:"Member removed"});
+    await jsonRequest("/api/team/members",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({workspaceId:workspace.id,membershipId,action:"remove"})});
+    setMembers(current=>current.filter(member=>member.id!==membershipId));setNotice({tone:"success",text:"Member removed."});
   });}
 
   function addDomain(){void run("domain-new",async()=>{
@@ -87,6 +87,7 @@ export function SettingsWorkspace({workspace,membership,initialDomains,inboundAd
   }
 
   const visibleMemberCount=members.length||memberCount;
+  const pendingInvitations=invitations.filter(item=>item.status==="pending");
 
   return <section className="settings-page">
     <div className="page-title-row"><div><p className="eyebrow">{workspace.name}</p><h1>Settings</h1></div><span className="muted">{membership.role} · {visibleMemberCount} member{visibleMemberCount===1?"":"s"}</span></div>
@@ -98,22 +99,23 @@ export function SettingsWorkspace({workspace,membership,initialDomains,inboundAd
 
       <div className="section-card email-setup-card">
         <h3><Mail size={16}/>Email inbox</h3>
-        <div className="setup-warning"><AlertTriangle size={18}/><div><strong>Email receiving is not connected in this deployment</strong><p>Do not send mail to the reserved address yet. The domain <code>inbound.relaydesk.app</code> has no active receiving DNS/provider, so messages will bounce and cannot enter Conversations.</p></div></div>
-        <p className="muted">Reserved workspace address</p><pre className="code-block disabled-address">{inboundAddress||"Not generated"}</pre>
-        <p className="muted">To activate real inbound email, the RelayDesk owner must connect a receiving domain with a provider such as Resend and point its signed webhook to <code>/api/inbound/resend</code>. The generic authenticated adapter is <code>/api/inbound/email</code>.</p>
+        {inboundConnected?<div className="setup-success"><CheckCircle2 size={18}/><div><strong>Email receiving is connected</strong><p>Send a test email to this workspace address. Resend will deliver it into Conversations through the signed inbound webhook.</p></div></div>:<div className="setup-warning"><AlertTriangle size={18}/><div><strong>Email receiving configuration is incomplete</strong><p>Add both <code>RESEND_API_KEY</code> and <code>RESEND_WEBHOOK_SECRET</code> in Vercel, then redeploy.</p></div></div>}
+        <p className="muted">Workspace support address</p><pre className="code-block">{inboundAddress||"Not generated"}</pre>
+        <p className="muted">Provider webhook: <code>/api/inbound/resend</code>. Incoming email is matched to this workspace by the address prefix and threaded using message headers.</p>
       </div>
 
       <div className="section-card">
-        <h3><UserPlus size={16}/>Invite teammate</h3><p className="muted">A person may belong to multiple RelayDesk workspaces. This invitation adds access only to {workspace.name}.</p>
+        <h3><UserPlus size={16}/>Invite teammate</h3><p className="muted">A person may belong to multiple RelayDesk workspaces. Existing users receive the invitation inside the workspace switcher even when Supabase does not send another signup email.</p>
         <label>Email<input type="email" value={email} disabled={busy("invite")} onChange={event=>setEmail(event.target.value)} placeholder="agent@company.com"/></label>
         <label>Role<select value={inviteRole} disabled={busy("invite")} onChange={event=>setInviteRole(event.target.value as "admin"|"agent")}><option value="agent">Agent</option><option value="admin">Admin</option></select></label>
-        <button className="primary-button" aria-busy={busy("invite")} disabled={Boolean(action)||!email.trim()} onClick={invite}>{busy("invite")?"Sending invite…":"Send invite"}</button>
-        {invitations.length>0&&<div><h4>Pending invitations</h4>{invitations.map(item=><p key={item.id} className="muted">{item.email} · {item.role} · expires {new Date(item.expires_at).toLocaleDateString()}</p>)}</div>}
+        <button className="primary-button" aria-busy={busy("invite")} disabled={Boolean(action)||!email.trim()||!isAdmin} onClick={invite}>{busy("invite")?"Sending invite…":"Send invite"}</button>
+        <div className="invite-summary"><span>{pendingInvitations.length} pending</span><span>{invitations.filter(item=>item.status==="accepted").length} accepted</span><span>{invitations.filter(item=>item.status==="expired").length} expired</span></div>
+        {invitations.length>0&&<div className="invite-history"><h4>Invitation status</h4>{invitations.map(item=><div key={item.id} className="invite-status-row"><span><strong>{item.email}</strong><small>{item.role} · created {new Date(item.created_at).toLocaleDateString()}</small></span><span className={`status-pill ${item.status}`}>{item.status}</span></div>)}</div>}
       </div>
 
       <div className="section-card">
         <h3><Users size={16}/>Team</h3>
-        {members.map(member=><div key={member.id} className="team-row"><div><strong>{member.name||member.email||"Team member"}</strong><p className="muted">{member.email||"No email"}</p></div><select disabled={!isAdmin||Boolean(action)} value={member.role} onChange={event=>changeMember(member.id,event.target.value as "admin"|"agent")}><option value="admin">Admin</option><option value="agent">Agent</option></select>{isAdmin&&member.id!==membership.id&&<button className="chip" aria-busy={busy(`member-${member.id}`)} disabled={Boolean(action)} onClick={()=>removeMember(member.id)}><Trash2 size={14}/>{busy(`member-${member.id}`)?"Removing…":"Remove"}</button>}</div>)}
+        {members.map(member=><div key={member.id} className="team-row"><div><strong>{member.name||member.email||"Team member"}</strong><p className="muted">{member.email||"No email"} · <span className="active-member">Active</span></p></div><select disabled={!isAdmin||Boolean(action)} value={member.role} onChange={event=>changeMember(member.id,event.target.value as "admin"|"agent")}><option value="admin">Admin</option><option value="agent">Agent</option></select>{isAdmin&&member.id!==membership.id&&<button className="chip" aria-busy={busy(`member-${member.id}`)} disabled={Boolean(action)} onClick={()=>removeMember(member.id)}><Trash2 size={14}/>{busy(`member-${member.id}`)?"Removing…":"Remove"}</button>}</div>)}
         {!members.length&&<p className="muted">Loading team…</p>}
       </div>
 
@@ -138,7 +140,7 @@ export function SettingsWorkspace({workspace,membership,initialDomains,inboundAd
       </div>
     </div>
     <style jsx>{`
-      .setup-warning{display:flex;gap:12px;padding:14px;border:1px solid #f2c94c;background:#fff9df;border-radius:12px;margin:12px 0}.setup-warning svg{flex:0 0 auto;color:#9a6700}.setup-warning p{margin:4px 0 0;line-height:1.5}.disabled-address{opacity:.58;text-decoration:line-through}.domain-flow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:14px 0}.domain-flow span{padding:9px;border-radius:9px;background:#f5f5f1;font-size:12px;font-weight:700}.domain-heading{display:flex;justify-content:space-between;align-items:center;gap:12px}.domain-status{padding:4px 8px;border-radius:999px;background:#eee;font-size:11px;font-weight:800;text-transform:uppercase}.domain-status.verified{background:#e8f7eb;color:#176b2c}.domain-status.failed{background:#fff0ee;color:#b42318}.domain-status.pending{background:#fff7d6;color:#7a5900}.domain-card code{overflow-wrap:anywhere}.domain-card .muted{display:flex;align-items:flex-start;gap:6px}@media(max-width:720px){.domain-flow{grid-template-columns:1fr}}
+      .setup-warning,.setup-success{display:flex;gap:12px;padding:14px;border-radius:12px;margin:12px 0}.setup-warning{border:1px solid #f2c94c;background:#fff9df}.setup-warning svg{color:#9a6700}.setup-success{border:1px solid #8dd89a;background:#edf9ef}.setup-success svg{color:#187b33}.setup-warning svg,.setup-success svg{flex:0 0 auto}.setup-warning p,.setup-success p{margin:4px 0 0;line-height:1.5}.invite-summary{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}.invite-summary span,.status-pill{padding:5px 8px;border-radius:999px;background:#eee;font-size:11px;font-weight:800;text-transform:capitalize}.invite-history{display:grid;gap:8px}.invite-status-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-top:1px solid #eee}.invite-status-row span:first-child{display:grid;gap:3px}.invite-status-row small{color:#777}.status-pill.pending{background:#fff7d6;color:#7a5900}.status-pill.accepted{background:#e8f7eb;color:#176b2c}.status-pill.expired{background:#f1f1f1;color:#666}.active-member{color:#176b2c;font-weight:700}.domain-flow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:14px 0}.domain-flow span{padding:9px;border-radius:9px;background:#f5f5f1;font-size:12px;font-weight:700}.domain-heading{display:flex;justify-content:space-between;align-items:center;gap:12px}.domain-status{padding:4px 8px;border-radius:999px;background:#eee;font-size:11px;font-weight:800;text-transform:uppercase}.domain-status.verified{background:#e8f7eb;color:#176b2c}.domain-status.failed{background:#fff0ee;color:#b42318}.domain-status.pending{background:#fff7d6;color:#7a5900}.domain-card code{overflow-wrap:anywhere}.domain-card .muted{display:flex;align-items:flex-start;gap:6px}@media(max-width:720px){.domain-flow{grid-template-columns:1fr}.invite-status-row{align-items:flex-start;flex-direction:column}}
     `}</style>
   </section>;
 }

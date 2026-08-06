@@ -25,12 +25,29 @@ export async function POST(request: Request) {
     .eq("user_id", user.id)
     .eq("role", "admin")
     .maybeSingle();
-
   if (!admin) return NextResponse.json({ error: "Only workspace admins can invite teammates." }, { status: 403 });
 
   const email = parsed.data.email.trim().toLowerCase();
   if (user.email?.toLowerCase() === email) {
     return NextResponse.json({ error: "You are already a member of this workspace." }, { status: 400 });
+  }
+
+  const authAdmin = createAdminClient();
+  const { data: userPage } = await authAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+  const existingUser = userPage.users.find((candidate) => candidate.email?.toLowerCase() === email);
+  if (existingUser) {
+    const { data: existingMembership } = await db
+      .from("memberships")
+      .select("id,role")
+      .eq("workspace_id", parsed.data.workspaceId)
+      .eq("user_id", existingUser.id)
+      .maybeSingle();
+    if (existingMembership) {
+      return NextResponse.json({
+        error: `${email} is already an active ${existingMembership.role} in this workspace.`,
+        code: "already_member",
+      }, { status: 409 });
+    }
   }
 
   const token = randomBytes(32).toString("hex");
@@ -52,13 +69,11 @@ export async function POST(request: Request) {
     expires_at: expiresAt,
     invited_by: user.id,
   });
-
   if (insertError) return NextResponse.json({ error: `Could not save invitation: ${insertError.message}` }, { status: 400 });
 
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin).replace(/\/$/, "");
   const inviteUrl = `${appUrl}/invite/${token}`;
   const workspace = Array.isArray(admin.workspaces) ? admin.workspaces[0] : admin.workspaces;
-  const authAdmin = createAdminClient();
 
   const { error: emailError } = await authAdmin.auth.admin.inviteUserByEmail(email, {
     redirectTo: inviteUrl,
@@ -70,6 +85,15 @@ export async function POST(request: Request) {
   });
 
   if (emailError) {
+    const registered = /already|registered|exists/i.test(emailError.message);
+    if (registered) {
+      return NextResponse.json({
+        ok: true,
+        delivery: "in-app",
+        message: `${email} already has a RelayDesk account. The pending invitation is saved and will appear in their workspace switcher.`,
+      });
+    }
+
     await db.from("invitations").delete().eq("token_hash", tokenHash);
     console.error("[team-invite] Supabase Auth rejected invitation send", {
       workspaceId: parsed.data.workspaceId,
@@ -77,20 +101,14 @@ export async function POST(request: Request) {
       status: emailError.status,
       message: emailError.message,
     });
-
-    const hint = /already|registered|exists/i.test(emailError.message)
-      ? " This address may already have a RelayDesk/Supabase account; try a fresh email address for the evaluator test."
-      : " Check Supabase Authentication logs and SMTP settings.";
-
-    return NextResponse.json(
-      { error: `Supabase did not send the invitation: ${emailError.message}.${hint}` },
-      { status: 502 },
-    );
+    return NextResponse.json({
+      error: `Invitation email was not accepted: ${emailError.message}. Check Supabase Authentication logs and SMTP settings.`,
+    }, { status: 502 });
   }
 
   return NextResponse.json({
     ok: true,
-    delivery: "accepted-by-supabase",
-    message: `Supabase accepted the invitation for ${email}. Check Inbox and Spam; SMTP delivery can take a few minutes.`,
+    delivery: "email-and-in-app",
+    message: `Invitation sent to ${email}. It is also visible in their RelayDesk workspace switcher after sign-in.`,
   });
 }

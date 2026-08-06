@@ -20,6 +20,7 @@ export default async function Settings() {
       membership={context.membership}
       initialDomains={domains ?? []}
       inboundAddress={workspaceInboundAddress(context.workspace.slug)}
+      inboundConnected={Boolean(process.env.RESEND_API_KEY && process.env.RESEND_WEBHOOK_SECRET)}
       memberCount={members?.length ?? 1}
     />
   );
