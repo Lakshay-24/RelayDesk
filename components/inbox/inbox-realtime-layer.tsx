@@ -116,12 +116,13 @@ export function InboxRealtimeLayer({ conversations, membership }: { conversation
     {summaryOpen ? <aside className="summary-popover">
       <div><Sparkles size={15}/><strong>Issue summary</strong><button onClick={() => setSummaryOpen(false)}>×</button></div>
       <p>{selected.summary || "A summary will appear after the conversation has enough context. New messages automatically queue a refresh."}</p>
+      <small>Free AI models may take up to 25–30 seconds per attempt. RelayDesk moves to the next configured model after a timeout or empty response.</small>
     </aside> : null}
     <style jsx>{`
-      .realtime-status{position:fixed;z-index:70;top:12px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:12px;max-width:calc(100vw - 32px);padding:7px 9px 7px 12px;border:1px solid #e4e7ec;border-radius:999px;background:rgba(255,255,255,.96);box-shadow:0 6px 18px rgba(16,24,40,.1);font-size:11px;color:#667085;backdrop-filter:blur(10px)}
-      .realtime-status span,.realtime-status strong,.realtime-status button{display:flex;align-items:center;gap:5px;white-space:nowrap}.realtime-status span.online{color:#027a48}.realtime-status strong{color:#344054}.realtime-status button{height:27px;padding:0 9px;border:0;border-radius:999px;background:#17181a;color:#fff;font-size:11px;font-weight:800;cursor:pointer}
-      .summary-popover{position:fixed;z-index:69;top:54px;right:22px;width:min(360px,calc(100vw - 32px));padding:15px;border:1px solid #e4e7ec;border-radius:16px;background:#fff;box-shadow:0 16px 40px rgba(16,24,40,.16)}.summary-popover>div{display:flex;align-items:center;gap:7px;color:#344054}.summary-popover>div button{margin-left:auto;border:0;background:transparent;font-size:22px;cursor:pointer;color:#98a2b3}.summary-popover p{margin:11px 0 0;color:#475467;font-size:12px;line-height:1.55;white-space:pre-wrap}
-      @media(max-width:760px){.realtime-status{top:8px}.realtime-status strong{display:none}.summary-popover{top:48px;right:16px}}
+      .realtime-status{position:fixed;z-index:70;top:14px;right:18px;display:flex;align-items:center;gap:10px;max-width:min(520px,calc(100vw - 36px));padding:7px 9px 7px 11px;border:1px solid #e4e7ec;border-radius:12px;background:rgba(255,255,255,.97);box-shadow:0 8px 24px rgba(16,24,40,.1);font-size:11px;color:#667085;backdrop-filter:blur(10px)}
+      .realtime-status span,.realtime-status strong,.realtime-status button{display:flex;align-items:center;gap:5px;white-space:nowrap}.realtime-status span.online{color:#027a48}.realtime-status strong{color:#344054}.realtime-status button{height:27px;padding:0 9px;border:0;border-radius:8px;background:#17181a;color:#fff;font-size:11px;font-weight:800;cursor:pointer}
+      .summary-popover{position:fixed;z-index:69;top:58px;right:18px;width:min(380px,calc(100vw - 32px));padding:15px;border:1px solid #e4e7ec;border-radius:16px;background:#fff;box-shadow:0 16px 40px rgba(16,24,40,.16)}.summary-popover>div{display:flex;align-items:center;gap:7px;color:#344054}.summary-popover>div button{margin-left:auto;border:0;background:transparent;font-size:22px;cursor:pointer;color:#98a2b3}.summary-popover p{margin:11px 0 8px;color:#475467;font-size:12px;line-height:1.55;white-space:pre-wrap}.summary-popover small{display:block;color:#667085;font-size:10px;line-height:1.45}
+      @media(max-width:760px){.realtime-status{top:auto;right:16px;bottom:92px;left:16px;max-width:none;justify-content:space-between}.realtime-status strong{display:none}.summary-popover{top:auto;right:16px;bottom:140px}}
     `}</style>
   </>;
 }

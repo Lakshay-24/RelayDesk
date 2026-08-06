@@ -4,6 +4,7 @@ import { InboxLiveRefresh } from "@/components/inbox/inbox-live-refresh";
 import { InboxRealtimeLayer } from "@/components/inbox/inbox-realtime-layer";
 import { InboundEmailSync } from "@/components/inbox/inbound-email-sync";
 import { MobileInboxNavigation } from "@/components/inbox/mobile-inbox-navigation";
+import { AiProgressOverlay } from "@/components/inbox/ai-progress-overlay";
 import { getAgentContext, getInboxData } from "@/lib/data/inbox";
 
 export default async function InboxPage() {
@@ -16,6 +17,7 @@ export default async function InboxPage() {
     <InboxLiveRefresh workspaceId={context.workspace.id}/>
     <InboxRealtimeLayer conversations={data.conversations} membership={context.membership}/>
     <MobileInboxNavigation/>
+    <AiProgressOverlay/>
     <InboxWorkspace key={inboxKey} workspace={context.workspace} membership={context.membership} members={data.members} cannedResponses={data.cannedResponses} initialConversations={data.conversations} initialMessages={data.messages}/>
   </>;
 }
