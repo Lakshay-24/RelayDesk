@@ -12,9 +12,7 @@ const schema = z.object({
 
 export async function POST(request: Request) {
   const parsed = schema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid invitation" }, { status: 400 });
-  }
+  if (!parsed.success) return NextResponse.json({ error: "Enter a valid teammate email and role." }, { status: 400 });
 
   const db = await createClient();
   const { data: { user } } = await db.auth.getUser();
@@ -28,14 +26,23 @@ export async function POST(request: Request) {
     .eq("role", "admin")
     .maybeSingle();
 
-  if (!admin) {
-    return NextResponse.json({ error: "Only admins can invite teammates" }, { status: 403 });
-  }
+  if (!admin) return NextResponse.json({ error: "Only workspace admins can invite teammates." }, { status: 403 });
 
   const email = parsed.data.email.trim().toLowerCase();
+  if (user.email?.toLowerCase() === email) {
+    return NextResponse.json({ error: "You are already a member of this workspace." }, { status: 400 });
+  }
+
   const token = randomBytes(32).toString("hex");
   const tokenHash = createHash("sha256").update(token).digest("hex");
   const expiresAt = new Date(Date.now() + 7 * 864e5).toISOString();
+
+  await db
+    .from("invitations")
+    .delete()
+    .eq("workspace_id", parsed.data.workspaceId)
+    .eq("email", email)
+    .is("accepted_at", null);
 
   const { error: insertError } = await db.from("invitations").insert({
     workspace_id: parsed.data.workspaceId,
@@ -46,9 +53,7 @@ export async function POST(request: Request) {
     invited_by: user.id,
   });
 
-  if (insertError) {
-    return NextResponse.json({ error: insertError.message }, { status: 400 });
-  }
+  if (insertError) return NextResponse.json({ error: `Could not save invitation: ${insertError.message}` }, { status: 400 });
 
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin).replace(/\/$/, "");
   const inviteUrl = `${appUrl}/invite/${token}`;
@@ -66,17 +71,26 @@ export async function POST(request: Request) {
 
   if (emailError) {
     await db.from("invitations").delete().eq("token_hash", tokenHash);
-    console.error("[team-invite] Supabase invite email failed", {
+    console.error("[team-invite] Supabase Auth rejected invitation send", {
       workspaceId: parsed.data.workspaceId,
       code: emailError.code,
       status: emailError.status,
       message: emailError.message,
     });
+
+    const hint = /already|registered|exists/i.test(emailError.message)
+      ? " This address may already have a RelayDesk/Supabase account; try a fresh email address for the evaluator test."
+      : " Check Supabase Authentication logs and SMTP settings.";
+
     return NextResponse.json(
-      { error: `Invitation email was not sent: ${emailError.message}` },
+      { error: `Supabase did not send the invitation: ${emailError.message}.${hint}` },
       { status: 502 },
     );
   }
 
-  return NextResponse.json({ ok: true, delivery: "supabase-auth" });
+  return NextResponse.json({
+    ok: true,
+    delivery: "accepted-by-supabase",
+    message: `Supabase accepted the invitation for ${email}. Check Inbox and Spam; SMTP delivery can take a few minutes.`,
+  });
 }
