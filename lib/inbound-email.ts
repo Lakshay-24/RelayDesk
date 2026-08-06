@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { inboundText, normalizeAddress } from "@/lib/security/email";
+import { RESEND_INBOUND_DOMAIN, workspaceInboundAddress } from "@/lib/inbound-address";
 
 export type InboundEmailInput = {
   from: string;
@@ -11,6 +12,32 @@ export type InboundEmailInput = {
   inReplyTo?: string | null;
   references?: string[];
 };
+
+async function resolveWorkspaceId(recipient: string) {
+  const db = createAdminClient();
+  const { data: address, error } = await db
+    .from("inbound_addresses")
+    .select("workspace_id")
+    .eq("address", recipient)
+    .maybeSingle();
+  if (!error && address) return address.workspace_id as string;
+
+  const [localPart, domain] = recipient.split("@");
+  if (!localPart || domain !== RESEND_INBOUND_DOMAIN) return null;
+
+  const { data: workspace } = await db
+    .from("workspaces")
+    .select("id,slug")
+    .eq("slug", localPart)
+    .maybeSingle();
+  if (!workspace) return null;
+
+  await db.from("inbound_addresses").upsert(
+    { workspace_id: workspace.id, address: workspaceInboundAddress(workspace.slug) },
+    { onConflict: "workspace_id" },
+  );
+  return workspace.id as string;
+}
 
 export async function processInboundEmail(input: InboundEmailInput) {
   const db = createAdminClient();
@@ -24,12 +51,8 @@ export async function processInboundEmail(input: InboundEmailInput) {
     .maybeSingle();
   if (existing) return { duplicate: true, conversationId: existing.conversation_id };
 
-  const { data: address, error: addressError } = await db
-    .from("inbound_addresses")
-    .select("workspace_id")
-    .eq("address", recipient)
-    .maybeSingle();
-  if (addressError || !address) throw new Error("Unknown recipient");
+  const workspaceId = await resolveWorkspaceId(recipient);
+  if (!workspaceId) throw new Error("Unknown recipient");
 
   const displayName = input.from.includes("<")
     ? input.from.split("<")[0].trim().replace(/^"|"$/g, "")
@@ -37,7 +60,7 @@ export async function processInboundEmail(input: InboundEmailInput) {
   const { data: contact, error: contactError } = await db
     .from("contacts")
     .upsert(
-      { workspace_id: address.workspace_id, email: sender, name: displayName, last_seen_at: new Date().toISOString() },
+      { workspace_id: workspaceId, email: sender, name: displayName, last_seen_at: new Date().toISOString() },
       { onConflict: "workspace_id,email" },
     )
     .select()
@@ -61,7 +84,7 @@ export async function processInboundEmail(input: InboundEmailInput) {
     const { data: conversation, error } = await db
       .from("conversations")
       .insert({
-        workspace_id: address.workspace_id,
+        workspace_id: workspaceId,
         contact_id: contact.id,
         channel: "email",
         subject: input.subject?.trim() || "No subject",
@@ -78,7 +101,7 @@ export async function processInboundEmail(input: InboundEmailInput) {
 
   const now = new Date().toISOString();
   const { error: messageError } = await db.from("messages").insert({
-    workspace_id: address.workspace_id,
+    workspace_id: workspaceId,
     conversation_id: conversationId,
     sender_type: "contact",
     channel: "email",
@@ -95,7 +118,7 @@ export async function processInboundEmail(input: InboundEmailInput) {
     .from("conversations")
     .update({ status: "open", last_message_at: now, updated_at: now })
     .eq("id", conversationId)
-    .eq("workspace_id", address.workspace_id);
+    .eq("workspace_id", workspaceId);
 
   return { duplicate: false, conversationId };
 }
