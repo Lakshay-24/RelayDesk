@@ -31,6 +31,10 @@ function fallbackDraft(messages: MessageRow[], subject?: string | null) {
     : `Thanks for sharing this. I understand the issue is: “${compact}” I’m reviewing it now and will help you with the next step.`;
 }
 
+function logGatewayFailure(details: Record<string, unknown>) {
+  console.error(`[ai-reply-draft] ${JSON.stringify(details)}`);
+}
+
 export async function POST(request: Request) {
   const requestId = crypto.randomUUID();
   const respond = (body: unknown, init?: ResponseInit) => Response.json(body, {
@@ -81,8 +85,11 @@ export async function POST(request: Request) {
 
   if (!messages?.length) return respond({ error: "Conversation is empty", requestId }, { status: 404, headers: rateLimitHeaders(limited) });
   const safeFallback = fallbackDraft(messages as MessageRow[], conversation.subject);
-  const apiKey = process.env.AI_GATEWAY_API_KEY;
-  if (!apiKey) return respond({ draft: safeFallback, fallback: true, requestId }, { headers: rateLimitHeaders(limited) });
+  const apiKey = process.env.AI_GATEWAY_API_KEY?.trim();
+  if (!apiKey) {
+    logGatewayFailure({ event: "missing_api_key", requestId, model: process.env.AI_GATEWAY_MODEL || "openai/gpt-5.4" });
+    return respond({ draft: safeFallback, fallback: true, fallbackReason: "AI_GATEWAY_API_KEY is missing", requestId }, { headers: rateLimitHeaders(limited) });
+  }
 
   const transcript = messages.map((message) => `${message.sender_type}: ${message.body}`).join("\n");
   const knowledge = (articles ?? [])
@@ -112,27 +119,33 @@ export async function POST(request: Request) {
       }),
     });
 
-    const payload = await response.json().catch(() => ({})) as GatewayPayload;
+    const raw = await response.text();
+    let payload: GatewayPayload = {};
+    try { payload = raw ? JSON.parse(raw) as GatewayPayload : {}; } catch { payload = {}; }
+
     if (!response.ok) {
-      console.error("AI Gateway reply draft failed", {
+      const message = payload.error?.message || raw.slice(0, 500) || response.statusText || "Unknown gateway error";
+      logGatewayFailure({
+        event: "gateway_http_error",
         requestId,
         status: response.status,
-        code: payload.error?.code,
-        message: payload.error?.message,
+        code: payload.error?.code || null,
+        message,
         model: preferredModel,
       });
-      return respond({ draft: safeFallback, fallback: true, requestId }, { headers: rateLimitHeaders(limited) });
+      return respond({ draft: safeFallback, fallback: true, fallbackReason: message, requestId }, { headers: rateLimitHeaders(limited) });
     }
 
     const draft = extractText(payload);
     if (!draft) {
-      console.error("AI Gateway reply draft was empty", { requestId, model: preferredModel });
-      return respond({ draft: safeFallback, fallback: true, requestId }, { headers: rateLimitHeaders(limited) });
+      logGatewayFailure({ event: "empty_gateway_response", requestId, status: response.status, model: preferredModel, responsePreview: raw.slice(0, 500) });
+      return respond({ draft: safeFallback, fallback: true, fallbackReason: "AI Gateway returned no reply text", requestId }, { headers: rateLimitHeaders(limited) });
     }
     return respond({ draft, fallback: false, requestId }, { headers: rateLimitHeaders(limited) });
   } catch (error) {
     const timedOut = error instanceof DOMException && error.name === "TimeoutError";
-    console.error("AI Gateway reply draft failed", { requestId, timedOut, model: preferredModel });
-    return respond({ draft: safeFallback, fallback: true, requestId }, { headers: rateLimitHeaders(limited) });
+    const message = error instanceof Error ? error.message : "Unknown network error";
+    logGatewayFailure({ event: timedOut ? "gateway_timeout" : "gateway_exception", requestId, timedOut, message, model: preferredModel });
+    return respond({ draft: safeFallback, fallback: true, fallbackReason: timedOut ? "AI Gateway timed out" : message, requestId }, { headers: rateLimitHeaders(limited) });
   }
 }

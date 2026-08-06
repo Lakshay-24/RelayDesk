@@ -10,6 +10,49 @@ const schema = z.object({
   role: z.enum(["admin", "agent"]),
 });
 
+const revokeSchema = z.object({
+  workspaceId: z.string().uuid(),
+  invitationId: z.string().uuid(),
+});
+
+export async function DELETE(request: Request) {
+  const parsed = revokeSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: "Invalid invitation." }, { status: 400 });
+
+  const db = await createClient();
+  const { data: { user } } = await db.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { data: admin } = await db
+    .from("memberships")
+    .select("id")
+    .eq("workspace_id", parsed.data.workspaceId)
+    .eq("user_id", user.id)
+    .eq("role", "admin")
+    .maybeSingle();
+  if (!admin) return NextResponse.json({ error: "Only workspace admins can revoke invitations." }, { status: 403 });
+
+  const { data: invitation, error: lookupError } = await db
+    .from("invitations")
+    .select("id,email,accepted_at")
+    .eq("id", parsed.data.invitationId)
+    .eq("workspace_id", parsed.data.workspaceId)
+    .maybeSingle();
+  if (lookupError) return NextResponse.json({ error: lookupError.message }, { status: 400 });
+  if (!invitation) return NextResponse.json({ error: "Invitation not found." }, { status: 404 });
+  if (invitation.accepted_at) return NextResponse.json({ error: "Accepted invitations cannot be revoked." }, { status: 409 });
+
+  const { error } = await db
+    .from("invitations")
+    .delete()
+    .eq("id", invitation.id)
+    .eq("workspace_id", parsed.data.workspaceId)
+    .is("accepted_at", null);
+  if (error) return NextResponse.json({ error: `Could not revoke invitation: ${error.message}` }, { status: 400 });
+
+  return NextResponse.json({ ok: true, message: `Invitation to ${invitation.email} revoked.` });
+}
+
 export async function POST(request: Request) {
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Enter a valid teammate email and role." }, { status: 400 });
