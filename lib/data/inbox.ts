@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type { CannedResponse, Contact, Conversation, ConversationPriority, ConversationStatus, Membership, Message, Workspace } from "@/types/domain";
 
 type Relation<T> = T | T[] | null;
@@ -13,7 +14,7 @@ export async function getAgentContext():Promise<{workspace:Workspace;membership:
  const selected=(await cookies()).get("relaydesk_workspace")?.value;
  const row=data.find(item=>item.workspace_id===selected)??data[0];
  const workspace=firstRelation(row.workspaces as Relation<Workspace>);if(!workspace)return null;
- return {workspace,membership:{id:row.id,workspace_id:row.workspace_id,user_id:row.user_id,role:row.role as Membership["role"],email:user.email??null}};
+ return {workspace,membership:{id:row.id,workspace_id:row.workspace_id,user_id:row.user_id,role:row.role as Membership["role"],email:user.email??null,name:user.user_metadata?.full_name??user.user_metadata?.name??null}};
 }
 
 export async function getInboxData(workspaceId:string):Promise<{conversations:Conversation[];messages:Message[];members:Membership[];cannedResponses:CannedResponse[]}>{
@@ -24,7 +25,8 @@ export async function getInboxData(workspaceId:string):Promise<{conversations:Co
  if(conversationIds.length){const {data,error}=await supabase.from("messages").select("*").in("conversation_id",conversationIds).order("created_at");if(error)throw error;messages=(data??[]) as Message[]}
  const {data:memberRows,error:memberError}=await supabase.from("memberships").select("id,workspace_id,user_id,role").eq("workspace_id",workspaceId);if(memberError)throw memberError;
  const {data:cannedRows,error:cannedError}=await supabase.from("canned_responses").select("id,workspace_id,title,body,tags,created_at,updated_at").eq("workspace_id",workspaceId).order("title");if(cannedError)throw cannedError;
+ const admin=createAdminClient();
+ const members=await Promise.all((memberRows??[]).map(async m=>{const {data}=await admin.auth.admin.getUserById(m.user_id);return {...m,role:m.role as Membership["role"],email:data.user?.email??null,name:data.user?.user_metadata?.full_name??data.user?.user_metadata?.name??null} as Membership;}));
  const conversations=rawConversations.map(c=>({...c,priority:c.priority??"normal",contact:firstRelation(c.contacts)??undefined,summary:firstRelation(c.conversation_summaries)?.summary??null} as Conversation));
- const members=(memberRows??[]).map(m=>({...m,role:m.role as Membership["role"]})) as Membership[];
  return {conversations,messages,members,cannedResponses:(cannedRows??[]) as CannedResponse[]};
 }

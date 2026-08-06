@@ -1,48 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle2, RefreshCw, ShieldCheck, TriangleAlert } from "lucide-react";
+import { CheckCircle2, RefreshCw, ShieldCheck, TriangleAlert, MailCheck } from "lucide-react";
 
-type DiagnosticCheck = { key: string; label: string; ok: boolean; detail: string; required: boolean };
-type DiagnosticPayload = {
-  requiredReady: boolean;
-  optionalReady: number;
-  optionalTotal: number;
-  checks: DiagnosticCheck[];
-  checkedAt: string;
-};
+type DiagnosticCheck={key:string;label:string;ok:boolean;detail:string;required:boolean};
+type DiagnosticPayload={requiredReady:boolean;optionalReady:number;optionalTotal:number;checks:DiagnosticCheck[];checkedAt:string};
+type InboundEvent={id:string;source:"webhook"|"sync";stage:string;status:"info"|"success"|"error";external_id:string|null;detail:string|null;created_at:string};
 
-export function DiagnosticsManager({ isAdmin }: { isAdmin: boolean }) {
-  const [result, setResult] = useState<DiagnosticPayload | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-
-  async function run() {
-    if (!isAdmin || busy) return;
-    setBusy(true); setError("");
-    try {
-      const response = await fetch("/api/diagnostics", { cache: "no-store" });
-      const json = await response.json();
-      if (!response.ok) throw new Error(json.error ?? "Diagnostics failed");
-      setResult(json);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Diagnostics failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  if (!isAdmin) return null;
-
-  return <div className="section-card diagnostics-card">
-    <div className="diagnostics-heading"><div><h3><ShieldCheck size={16}/> Evaluator diagnostics</h3><p className="muted">Runs read-only checks against this deployed workspace and its configured services.</p></div><button className="chip" onClick={() => void run()} disabled={busy}><RefreshCw size={14}/>{busy ? "Checking…" : result ? "Run again" : "Run checks"}</button></div>
-    {error && <p className="form-error">{error}</p>}
-    {result && <>
-      <div className={`diagnostics-summary ${result.requiredReady ? "ready" : "blocked"}`}>
-        {result.requiredReady ? <CheckCircle2 size={18}/> : <TriangleAlert size={18}/>}<strong>{result.requiredReady ? "Core deployment ready" : "Core deployment has blockers"}</strong><span>{result.optionalReady}/{result.optionalTotal} provider integrations configured</span>
-      </div>
-      <div className="diagnostics-list">{result.checks.map((check) => <div className="diagnostic-row" key={check.key}><span className={`diagnostic-dot ${check.ok ? "ok" : check.required ? "error" : "warning"}`}/><div><strong>{check.label}</strong><p className="muted">{check.detail}</p></div><small>{check.required ? "Required" : "External"}</small></div>)}</div>
-      <p className="muted">Checked {new Date(result.checkedAt).toLocaleString()}</p>
-    </>}
-  </div>;
+export function DiagnosticsManager({isAdmin}:{isAdmin:boolean}){
+ const [result,setResult]=useState<DiagnosticPayload|null>(null);const [events,setEvents]=useState<InboundEvent[]>([]);const [busy,setBusy]=useState(false);const [syncing,setSyncing]=useState(false);const [error,setError]=useState("");const [syncResult,setSyncResult]=useState("");
+ async function loadInbound(){const response=await fetch("/api/inbound/diagnostics",{cache:"no-store"});const json=await response.json();if(!response.ok)throw new Error(json.error??"Could not load inbound diagnostics");setEvents(json.events??[]);}
+ async function run(){if(!isAdmin||busy)return;setBusy(true);setError("");try{const [response]=await Promise.all([fetch("/api/diagnostics",{cache:"no-store"}),loadInbound()]);const json=await response.json();if(!response.ok)throw new Error(json.error??"Diagnostics failed");setResult(json);}catch(caught){setError(caught instanceof Error?caught.message:"Diagnostics failed");}finally{setBusy(false);}}
+ async function syncNow(){if(syncing)return;setSyncing(true);setError("");setSyncResult("");try{const contextResponse=await fetch("/api/workspaces/context",{cache:"no-store"});const context=await contextResponse.json();if(!contextResponse.ok||!context.activeWorkspaceId)throw new Error(context.error??"No active workspace");const response=await fetch("/api/inbound/resend/sync",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({workspaceId:context.activeWorkspaceId})});const json=await response.json();if(!response.ok)throw new Error(json.error??"Email sync failed");setSyncResult(`Checked ${json.checked}; imported ${json.imported}; duplicates ${json.duplicates}; failures ${json.failures?.length??0}.`);await loadInbound();}catch(caught){setError(caught instanceof Error?caught.message:"Email sync failed");}finally{setSyncing(false);}}
+ if(!isAdmin)return null;
+ return <div className="section-card diagnostics-card"><div className="diagnostics-heading"><div><h3><ShieldCheck size={16}/>Evaluator diagnostics</h3><p className="muted">Checks the deployment and shows exactly whether Resend reached RelayDesk.</p></div><button className="chip" onClick={()=>void run()} disabled={busy}><RefreshCw size={14}/>{busy?"Checking…":result?"Run again":"Run checks"}</button></div>{error&&<p className="form-error">{error}</p>}{result&&<><div className={`diagnostics-summary ${result.requiredReady?"ready":"blocked"}`}>{result.requiredReady?<CheckCircle2 size={18}/>:<TriangleAlert size={18}/>}<strong>{result.requiredReady?"Core deployment ready":"Core deployment has blockers"}</strong><span>{result.optionalReady}/{result.optionalTotal} provider integrations configured</span></div><div className="diagnostics-list">{result.checks.map(check=><div className="diagnostic-row" key={check.key}><span className={`diagnostic-dot ${check.ok?"ok":check.required?"error":"warning"}`}/><div><strong>{check.label}</strong><p className="muted">{check.detail}</p></div><small>{check.required?"Required":"External"}</small></div>)}</div></>}
+ <div className="inbound-diagnostics"><div className="diagnostics-heading"><div><h3><MailCheck size={16}/>Inbound email log</h3><p className="muted">Webhook and recovery-sync stages; no email body or secrets are stored.</p></div><button className="chip" onClick={()=>void syncNow()} disabled={syncing}>{syncing?"Syncing…":"Sync now"}</button></div>{syncResult&&<p className="form-success">{syncResult}</p>}{events.length?<div className="inbound-event-list">{events.map(event=><div className="inbound-event" key={event.id}><span className={`diagnostic-dot ${event.status==="success"?"ok":event.status==="error"?"error":"warning"}`}/><div><strong>{event.stage.replaceAll("_"," ")}</strong><p className="muted">{event.source} · {new Date(event.created_at).toLocaleString()}{event.detail?` · ${event.detail}`:""}</p></div></div>)}</div>:<p className="muted">Run checks or Sync now to load the latest inbound events.</p>}</div>
+ <style jsx>{`.inbound-diagnostics{margin-top:22px;padding-top:18px;border-top:1px solid #e5e5e0}.inbound-event-list{display:grid;gap:8px;max-height:320px;overflow:auto}.inbound-event{display:grid;grid-template-columns:10px 1fr;gap:10px;align-items:start;padding:9px 0;border-bottom:1px solid #eee}.inbound-event p{margin:3px 0 0}`}</style></div>;
 }
