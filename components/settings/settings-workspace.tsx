@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Globe2, Mail, ShieldCheck, Trash2, UserPlus, Users } from "lucide-react";
+import { AlertTriangle, Check, Globe2, Mail, ShieldCheck, Trash2, UserPlus, Users } from "lucide-react";
 import type { Membership, Workspace } from "@/types/domain";
 import { ApiAccessManager } from "@/components/settings/api-access-manager";
 import { CannedResponsesManager } from "@/components/settings/canned-responses-manager";
@@ -24,7 +24,6 @@ export function SettingsWorkspace({workspace,membership,initialDomains,inboundAd
   const [members,setMembers]=useState<TeamMember[]>([]);
   const [invitations,setInvitations]=useState<Invitation[]>([]);
   const [action,setAction]=useState("");
-
   const isAdmin=membership.role==="admin";
   const appUrl=typeof window!=="undefined"?window.location.origin:process.env.NEXT_PUBLIC_APP_URL||"https://relay-desk-mjq6.vercel.app";
   const busy=(key:string)=>action===key;
@@ -32,7 +31,7 @@ export function SettingsWorkspace({workspace,membership,initialDomains,inboundAd
   async function jsonRequest(url:string,init?:RequestInit){
     const response=await fetch(url,init);
     const json=await response.json().catch(()=>({}));
-    if(!response.ok)throw new Error(json.error??"Request failed");
+    if(!response.ok){const error=new Error(json.error??"Request failed") as Error&{pending?:boolean};error.pending=Boolean(json.pending);throw error;}
     return json;
   }
 
@@ -51,7 +50,7 @@ export function SettingsWorkspace({workspace,membership,initialDomains,inboundAd
 
   function invite(){void run("invite",async()=>{
     const json=await jsonRequest("/api/team/invite",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({workspaceId:workspace.id,email:email.trim(),role:inviteRole})});
-    setEmail("");await loadTeam();setNotice({tone:"success",text:json.message??"Supabase accepted the invitation email. Ask the recipient to check Inbox and Spam."});
+    setEmail("");await loadTeam();setNotice({tone:"success",text:json.message??"Invitation accepted for delivery. Ask the recipient to check Inbox and Spam."});
   });}
 
   function changeMember(membershipId:string,role:"admin"|"agent"){void run(`member-${membershipId}`,async()=>{
@@ -70,12 +69,14 @@ export function SettingsWorkspace({workspace,membership,initialDomains,inboundAd
     setDomains(current=>[...current,json.domain]);setHostname("");setNotice({tone:"success",text:json.message??"Domain saved. Add the DNS records shown below."});
   });}
 
-  function verify(domain:Domain){void run(`domain-${domain.id}`,async()=>{
-    try{
-      const json=await jsonRequest("/api/domains",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({workspaceId:workspace.id,domainId:domain.id})});
-      setDomains(current=>current.map(item=>item.id===domain.id?json.domain:item));setNotice({tone:"success",text:json.message??"Domain verified and HTTPS activation started."});
-    }catch(error){setDomains(current=>current.map(item=>item.id===domain.id?{...item,status:"failed"}:item));throw error;}
-  });}
+  function verify(domain:Domain){
+    if(action)return;
+    setAction(`domain-${domain.id}`);setNotice({tone:"info",text:"Checking the public DNS records…"});
+    void jsonRequest("/api/domains",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({workspaceId:workspace.id,domainId:domain.id})})
+      .then(json=>{setDomains(current=>current.map(item=>item.id===domain.id?json.domain:item));setNotice({tone:"success",text:json.message??"Domain verified and HTTPS activation started."});})
+      .catch((error:Error&{pending?:boolean})=>{setDomains(current=>current.map(item=>item.id===domain.id?{...item,status:error.pending?"pending":"failed"}:item));setNotice({tone:error.pending?"info":"error",text:error.message});})
+      .finally(()=>setAction(""));
+  }
 
   function removeDomain(domain:Domain){
     if(!window.confirm(`Remove ${domain.hostname} from RelayDesk?`))return;
@@ -95,18 +96,18 @@ export function SettingsWorkspace({workspace,membership,initialDomains,inboundAd
     <div className="settings-grid">
       <WidgetInstallCard appUrl={appUrl} workspaceKey={workspace.public_key} onNotice={(text)=>setNotice({tone:"success",text})}/>
 
-      <div className="section-card">
-        <h3><Mail size={16}/>Email inbox</h3><p>Forward support mail to:</p><pre className="code-block">{inboundAddress||"Created automatically after workspace setup"}</pre>
-        <p className="muted">Authentication SMTP only sends login and invitation emails. Receiving customer support email still requires the configured inbound provider webhook.</p>
-        <p className="muted">Generic webhook: <code>/api/inbound/email</code>. Native Resend receiving: <code>/api/inbound/resend</code>. Delivery events: <code>/api/email/events</code>.</p>
+      <div className="section-card email-setup-card">
+        <h3><Mail size={16}/>Email inbox</h3>
+        <div className="setup-warning"><AlertTriangle size={18}/><div><strong>Email receiving is not connected in this deployment</strong><p>Do not send mail to the reserved address yet. The domain <code>inbound.relaydesk.app</code> has no active receiving DNS/provider, so messages will bounce and cannot enter Conversations.</p></div></div>
+        <p className="muted">Reserved workspace address</p><pre className="code-block disabled-address">{inboundAddress||"Not generated"}</pre>
+        <p className="muted">To activate real inbound email, the RelayDesk owner must connect a receiving domain with a provider such as Resend and point its signed webhook to <code>/api/inbound/resend</code>. The generic authenticated adapter is <code>/api/inbound/email</code>.</p>
       </div>
 
       <div className="section-card">
-        <h3><UserPlus size={16}/>Invite teammate</h3><p className="muted">RelayDesk asks Supabase Auth to send this through your configured SMTP provider.</p>
+        <h3><UserPlus size={16}/>Invite teammate</h3><p className="muted">A person may belong to multiple RelayDesk workspaces. This invitation adds access only to {workspace.name}.</p>
         <label>Email<input type="email" value={email} disabled={busy("invite")} onChange={event=>setEmail(event.target.value)} placeholder="agent@company.com"/></label>
         <label>Role<select value={inviteRole} disabled={busy("invite")} onChange={event=>setInviteRole(event.target.value as "admin"|"agent")}><option value="agent">Agent</option><option value="admin">Admin</option></select></label>
         <button className="primary-button" aria-busy={busy("invite")} disabled={Boolean(action)||!email.trim()} onClick={invite}>{busy("invite")?"Sending invite…":"Send invite"}</button>
-        <p className="muted">A success message means Supabase accepted the send request. Check Spam if Gmail delays delivery.</p>
         {invitations.length>0&&<div><h4>Pending invitations</h4>{invitations.map(item=><p key={item.id} className="muted">{item.email} · {item.role} · expires {new Date(item.expires_at).toLocaleDateString()}</p>)}</div>}
       </div>
 
@@ -120,24 +121,24 @@ export function SettingsWorkspace({workspace,membership,initialDomains,inboundAd
 
       <div className="section-card">
         <h3><Globe2 size={16}/>Custom help domain</h3>
-        <p className="muted">Your customer only changes DNS at their registrar. RelayDesk registers the hostname with its hosting provider and HTTPS is issued automatically—no customer needs access to this Vercel project.</p>
-        <div className="domain-flow"><span>1. Enter a subdomain</span><span>2. Add TXT + CNAME</span><span>3. Verify and open HTTPS</span></div>
+        <p className="muted">Enter a subdomain, add the exact TXT and CNAME records at your DNS provider, then verify. A missing record remains Pending rather than becoming a system failure.</p>
+        <div className="domain-flow"><span>1. Enter subdomain</span><span>2. Add TXT + CNAME</span><span>3. Verify and open HTTPS</span></div>
         <label>Help-centre hostname<input value={hostname} disabled={busy("domain-new")} onChange={event=>setHostname(event.target.value.toLowerCase().trim())} placeholder="help.company.com"/></label>
         <button className="primary-button" aria-busy={busy("domain-new")} disabled={!isAdmin||Boolean(action)||!hostname.trim()} onClick={addDomain}>{busy("domain-new")?"Registering domain…":"Connect domain"}</button>
         {domains.map(domain=><div key={domain.id} className="section-card domain-card">
-          <div className="domain-heading"><strong>{domain.hostname}</strong><span className={`domain-status ${domain.status}`}>{domain.status}</span></div>
+          <div className="domain-heading"><strong>{domain.hostname}</strong><span className={`domain-status ${domain.status}`}>{domain.status==="pending"?"Pending DNS":domain.status}</span></div>
           <p><strong>Ownership record</strong><br/><code>TXT _relaydesk.{domain.hostname}</code><br/><code>{domain.verification_token}</code></p>
           <p><strong>Traffic record</strong><br/><code>CNAME {domain.hostname}</code><br/><code>{process.env.NEXT_PUBLIC_CUSTOM_DOMAIN_CNAME_TARGET||"cname.vercel-dns.com"}</code></p>
-          <p className="muted"><ShieldCheck size={14}/> After verification, RelayDesk activates hosting and HTTPS automatically when owner-side Vercel automation is configured.</p>
+          <p className="muted"><ShieldCheck size={14}/> RelayDesk registers verified hostnames with hosting and HTTPS is provisioned automatically.</p>
           <div className="filters">
-            <button className="chip" aria-busy={busy(`domain-${domain.id}`)} disabled={Boolean(action)||domain.status==="verified"} onClick={()=>verify(domain)}>{domain.status==="verified"?<><Check size={14}/>HTTPS ready</>:busy(`domain-${domain.id}`)?"Checking DNS and HTTPS…":domain.status==="failed"?"Retry verification":"Verify domain"}</button>
+            <button className="chip" aria-busy={busy(`domain-${domain.id}`)} disabled={Boolean(action)||domain.status==="verified"} onClick={()=>verify(domain)}>{domain.status==="verified"?<><Check size={14}/>HTTPS ready</>:busy(`domain-${domain.id}`)?"Checking DNS…":"Check DNS"}</button>
             <button className="chip danger-chip" disabled={Boolean(action)||!isAdmin} onClick={()=>removeDomain(domain)}><Trash2 size={14}/>{busy(`domain-${domain.id}`)?"Removing…":"Remove"}</button>
           </div>
         </div>)}
       </div>
     </div>
     <style jsx>{`
-      .domain-flow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:14px 0}.domain-flow span{padding:9px;border-radius:9px;background:#f5f5f1;font-size:12px;font-weight:700}.domain-heading{display:flex;justify-content:space-between;align-items:center;gap:12px}.domain-status{padding:4px 8px;border-radius:999px;background:#eee;font-size:11px;font-weight:800;text-transform:uppercase}.domain-status.verified{background:#e8f7eb;color:#176b2c}.domain-status.failed{background:#fff0ee;color:#b42318}.domain-card code{overflow-wrap:anywhere}.domain-card .muted{display:flex;align-items:flex-start;gap:6px}@media(max-width:720px){.domain-flow{grid-template-columns:1fr}}
+      .setup-warning{display:flex;gap:12px;padding:14px;border:1px solid #f2c94c;background:#fff9df;border-radius:12px;margin:12px 0}.setup-warning svg{flex:0 0 auto;color:#9a6700}.setup-warning p{margin:4px 0 0;line-height:1.5}.disabled-address{opacity:.58;text-decoration:line-through}.domain-flow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:14px 0}.domain-flow span{padding:9px;border-radius:9px;background:#f5f5f1;font-size:12px;font-weight:700}.domain-heading{display:flex;justify-content:space-between;align-items:center;gap:12px}.domain-status{padding:4px 8px;border-radius:999px;background:#eee;font-size:11px;font-weight:800;text-transform:uppercase}.domain-status.verified{background:#e8f7eb;color:#176b2c}.domain-status.failed{background:#fff0ee;color:#b42318}.domain-status.pending{background:#fff7d6;color:#7a5900}.domain-card code{overflow-wrap:anywhere}.domain-card .muted{display:flex;align-items:flex-start;gap:6px}@media(max-width:720px){.domain-flow{grid-template-columns:1fr}}
     `}</style>
   </section>;
 }

@@ -35,21 +35,14 @@ async function vercelRequest(method: "POST" | "DELETE", hostname: string, action
 
   const response = await fetch(projectDomainUrl(config.project, action ? hostname : method === "DELETE" ? hostname : undefined, action), {
     method,
-    headers: {
-      authorization: `Bearer ${config.token}`,
-      "content-type": "application/json",
-    },
+    headers: { authorization: `Bearer ${config.token}`, "content-type": "application/json" },
     body: method === "POST" && !action ? JSON.stringify({ name: hostname }) : undefined,
     cache: "no-store",
   });
   const payload = await response.json().catch(() => ({}));
   const alreadyAdded = response.status === 409 || /already|exists/i.test(String(payload?.error?.message ?? payload?.message ?? ""));
   if (!response.ok && !alreadyAdded) {
-    return {
-      automated: true as const,
-      ok: false as const,
-      message: String(payload?.error?.message ?? payload?.message ?? `Vercel returned ${response.status}`),
-    };
+    return { automated: true as const, ok: false as const, message: String(payload?.error?.message ?? payload?.message ?? `Vercel returned ${response.status}`) };
   }
   return { automated: true as const, ok: true as const, message: alreadyAdded ? "Domain is already registered with RelayDesk hosting." : "Domain registered with RelayDesk hosting." };
 }
@@ -66,12 +59,7 @@ export async function POST(request: Request) {
 
   const hostname = parsed.data.hostname.toLowerCase().replace(/\.$/, "");
   const token = `relaydesk-verification=${randomBytes(18).toString("hex")}`;
-  const { data, error } = await db.from("custom_domains").insert({
-    workspace_id: parsed.data.workspaceId,
-    hostname,
-    verification_token: token,
-    status: "pending",
-  }).select().single();
+  const { data, error } = await db.from("custom_domains").insert({ workspace_id: parsed.data.workspaceId, hostname, verification_token: token, status: "pending" }).select().single();
   if (error) return NextResponse.json({ error: error.code === "23505" ? "This hostname is already connected." : error.message }, { status: 400 });
 
   const hosting = await vercelRequest("POST", hostname);
@@ -82,9 +70,7 @@ export async function POST(request: Request) {
       cname: { name: hostname, value: process.env.CUSTOM_DOMAIN_CNAME_TARGET ?? "cname.vercel-dns.com" },
       txt: { name: `_relaydesk.${hostname}`, value: token },
     },
-    message: hosting.ok
-      ? "Domain saved and registered for automatic HTTPS. Add the two DNS records below, then verify."
-      : "Domain saved. Add the DNS records below. Automatic HTTPS will activate after owner-side Vercel automation is configured.",
+    message: hosting.ok ? "Domain saved and registered for automatic HTTPS. Add the two DNS records below, then verify." : "Domain saved. Add the DNS records below, then verify.",
   });
 }
 
@@ -104,28 +90,24 @@ export async function PATCH(request: Request) {
   await db.from("custom_domains").update({ status: "pending", updated_at: new Date().toISOString() }).eq("id", domain.id);
   try {
     const records = (await dns.resolveTxt(`_relaydesk.${domain.hostname}`)).flat();
-    if (!records.includes(domain.verification_token)) throw new Error("Verification TXT record has not propagated yet.");
+    if (!records.includes(domain.verification_token)) {
+      return NextResponse.json({ error: "We found the TXT record, but its value does not match. Copy the exact verification value shown below and retry.", pending: true }, { status: 409 });
+    }
 
     const registration = await vercelRequest("POST", domain.hostname);
     if (registration.automated && !registration.ok) throw new Error(`DNS ownership passed, but hosting registration failed: ${registration.message}`);
     const hosting = registration.automated ? await vercelRequest("POST", domain.hostname, "verify") : registration;
     if (hosting.automated && !hosting.ok) throw new Error(`DNS ownership passed, but HTTPS activation is still pending: ${hosting.message}`);
 
-    const { data, error } = await db.from("custom_domains").update({
-      status: "verified",
-      verified_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    }).eq("id", domain.id).select().single();
+    const { data, error } = await db.from("custom_domains").update({ status: "verified", verified_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", domain.id).select().single();
     if (error) throw error;
-
-    return NextResponse.json({
-      domain: data,
-      hosting,
-      message: hosting.ok
-        ? "Domain verified. RelayDesk registered it with hosting and Vercel will provision HTTPS automatically."
-        : "Domain ownership verified. HTTPS automation is unavailable until the RelayDesk owner configures Vercel credentials.",
-    });
+    return NextResponse.json({ domain: data, hosting, message: "Domain verified. HTTPS provisioning has started automatically." });
   } catch (error) {
+    const code = typeof error === "object" && error && "code" in error ? String((error as { code?: unknown }).code ?? "") : "";
+    if (["ENOTFOUND", "ENODATA", "ETIMEOUT", "EAI_AGAIN"].includes(code)) {
+      await db.from("custom_domains").update({ status: "pending", updated_at: new Date().toISOString() }).eq("id", domain.id);
+      return NextResponse.json({ error: "Verification record not found yet. Add the TXT record shown below, allow time for DNS propagation, then retry.", pending: true }, { status: 409 });
+    }
     const message = error instanceof Error ? error.message : "Domain verification failed.";
     await db.from("custom_domains").update({ status: "failed", updated_at: new Date().toISOString() }).eq("id", domain.id);
     return NextResponse.json({ error: message }, { status: 409 });
@@ -144,7 +126,6 @@ export async function DELETE(request: Request) {
 
   const { data: domain } = await db.from("custom_domains").select("hostname").eq("id", parsed.data.domainId).eq("workspace_id", parsed.data.workspaceId).maybeSingle();
   if (!domain) return NextResponse.json({ error: "Domain not found." }, { status: 404 });
-
   const { error } = await db.from("custom_domains").delete().eq("id", parsed.data.domainId).eq("workspace_id", parsed.data.workspaceId);
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   await vercelRequest("DELETE", domain.hostname);
