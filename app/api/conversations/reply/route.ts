@@ -23,12 +23,17 @@ export async function POST(request:Request){
  let inReplyTo:string|null=null;
  if(conversation.channel==="email"){
   const contact=Array.isArray(conversation.contacts)?conversation.contacts[0]:conversation.contacts;
-  const workspace=Array.isArray(conversation.workspaces)?conversation.workspaces[0]:conversation.workspaces;
   if(!contact?.email)return NextResponse.json({error:"Contact has no email address"},{status:400});
   const rows=((conversation.messages??[]) as {external_message_id:string|null;created_at:string}[]).filter(item=>Boolean(item.external_message_id)).sort((a,b)=>+new Date(a.created_at)-+new Date(b.created_at));
   const references=rows.map(item=>item.external_message_id as string);
   inReplyTo=references.at(-1)??null;
-  const from=process.env.OUTBOUND_EMAIL_FROM??`${workspace?.name??"RelayDesk"} <support@${process.env.INBOUND_EMAIL_DOMAIN??"example.com"}>`;
+  const from=process.env.OUTBOUND_EMAIL_FROM?.trim();
+  if(!from){
+   return NextResponse.json({
+    error:"Outbound email is not configured. Add OUTBOUND_EMAIL_FROM using a sender on a domain verified in Resend, for example RelayDesk <support@yourdomain.com>.",
+    code:"outbound_sender_missing",
+   },{status:503});
+  }
   try{
    const sent=await sendEmail({
     to:contact.email,
@@ -40,8 +45,13 @@ export async function POST(request:Request){
    });
    externalMessageId=sent.id;
   }catch(error){
-   console.error("Outbound support email failed",{conversationId:conversation.id,message:error instanceof Error?error.message:"Email delivery failed"});
-   return NextResponse.json({error:error instanceof Error?error.message:"Email delivery failed"},{status:502});
+   const message=error instanceof Error?error.message:"Email delivery failed";
+   console.error("Outbound support email failed",{conversationId:conversation.id,message,from});
+   const unverified=/domain is not verified|verify your domain/i.test(message);
+   return NextResponse.json({
+    error:unverified?"The OUTBOUND_EMAIL_FROM domain is not verified in Resend. Verify that domain in Resend or change OUTBOUND_EMAIL_FROM to a verified sender.":message,
+    code:unverified?"outbound_domain_unverified":"outbound_delivery_failed",
+   },{status:502});
   }
  }
 

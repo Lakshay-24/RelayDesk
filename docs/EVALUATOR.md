@@ -38,11 +38,12 @@ Google OAuth is considered passing only after a fresh production sign-in succeed
 - Open the host page and dashboard in separate browser profiles.
 - Send messages in both directions without refreshing.
 - Verify visitor/agent typing, online/offline presence, visitor read receipt, agent read receipt, and history after reload.
+- On a phone-width viewport, confirm tapping a conversation opens the thread and the Conversations back button returns to the list.
 
 ## 4. Email channel
 
 - Configure Resend sending and receiving domains.
-- Set `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET`, and `OUTBOUND_EMAIL_FROM`.
+- Set `RESEND_API_KEY`, `EMAIL_WEBHOOK_SECRET`, `INBOUND_EMAIL_DOMAIN`, and `OUTBOUND_EMAIL_FROM`.
 - Point the Resend `email.received` event to `/api/inbound/resend`.
 - Point delivery events to `/api/email/events`.
 - Send a new customer email and verify a new inbox thread.
@@ -67,18 +68,24 @@ Google OAuth is considered passing only after a fresh production sign-in succeed
 
 ## 7. AI
 
-- Configure `AI_GATEWAY_API_KEY`.
-- Generate a summary on a long conversation and verify goal, attempted actions, unresolved items, and current state.
-- Generate an AI reply draft and edit it before sending.
-- Verify rate-limit and timeout errors are visible and include a request ID.
+- Configure `OPENROUTER_API_KEY` and `GEMINI_API_KEY`.
+- Configure `OPENROUTER_MODEL`, `OPENROUTER_FALLBACK_MODEL`, `GEMINI_MODEL`, and `GEMINI_FALLBACK_MODEL`.
+- Confirm the provider chain tries OpenRouter primary, OpenRouter fallback, Gemini primary, then Gemini fallback until one succeeds.
+- Generate a summary on a long conversation and verify customer goal, attempted actions, unresolved items, and current status/next action.
+- Add another message and confirm the queued summary refresh updates the saved summary.
+- Generate an AI reply draft, verify it uses conversation context and published knowledge articles, and edit it before sending.
+- Temporarily use an invalid primary model and confirm a later provider/model succeeds.
+- Confirm a deterministic emergency draft/summary is clearly marked only when every configured AI attempt fails.
+- Verify rate-limit and provider failures include a request ID in the API response/logs.
 
 ## 8. Custom domain
 
 - Add `help.company.com`.
 - Publish the displayed TXT and CNAME records.
+- Set `VERCEL_TOKEN`, `VERCEL_PROJECT_ID`, and `VERCEL_TEAM_ID` for automatic registration.
 - Verify ownership in Settings.
-- Register the hostname with the Vercel project; Vercel provisions SSL after DNS validation.
-- Open the custom host and confirm it routes to the correct workspace help centre.
+- Confirm Vercel provisions SSL after DNS validation.
+- Open the custom host and confirm `/` and article paths route to the correct workspace help centre.
 
 ## 9. API and webhooks
 
@@ -88,6 +95,18 @@ Google OAuth is considered passing only after a fresh production sign-in succeed
 - Add a webhook endpoint, send a test, inspect history, force a failure, and retry it.
 - Configure `CRON_SECRET` and invoke `/api/internal/webhook-retries` with the bearer secret to process due deliveries.
 
-## 10. Final acceptance rule
+## 10. Mobile regression pass
 
-Do not claim an external integration as passing unless the real provider round trip was observed. Keep screenshots or request logs for the two-browser chat, threaded email, custom-domain TLS, Google OAuth, API revocation, and webhook retry flows.
+At phone widths (320–760px):
+
+- Inbox list fits without horizontal scrolling.
+- Conversation opens as a full thread and can return to the list.
+- Composer, thread actions, summaries, typing indicators, and receipts remain visible.
+- Settings cards, numbered instructions, code blocks, email/domain values, buttons, and inputs wrap inside the viewport.
+- Knowledge and Analytics pages do not create document-level horizontal overflow.
+
+Tablet and desktop layouts must remain unchanged by these phone-only rules.
+
+## 11. Final acceptance rule
+
+Do not claim an external integration as passing unless the real provider round trip was observed. Keep screenshots or request logs for the two-browser chat, threaded email, AI provider fallback, custom-domain TLS, Google OAuth, API revocation, and webhook retry flows.

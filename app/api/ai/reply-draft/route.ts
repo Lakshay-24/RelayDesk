@@ -9,7 +9,13 @@ type OpenRouterPayload = {
   error?: { code?: string | number; message?: string };
   model?: string;
 };
+type GeminiPayload = {
+  candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  error?: { code?: number; message?: string; status?: string };
+  modelVersion?: string;
+};
 type MessageRow = { sender_type: string; body: string; created_at: string };
+type AttemptResult = { ok: true; draft: string; model: string; provider: "openrouter" | "gemini" } | { ok: false; reason: string; timedOut: boolean; status?: number };
 
 function fallbackDraft(messages: MessageRow[], subject?: string | null) {
   const latestCustomer = [...messages].reverse().find((message) => message.sender_type === "contact")?.body.trim();
@@ -23,6 +29,83 @@ function fallbackDraft(messages: MessageRow[], subject?: string | null) {
 
 function logFailure(details: Record<string, unknown>) {
   console.error(`[ai-reply-draft] ${JSON.stringify(details)}`);
+}
+
+function uniqueModels(models: string[]) {
+  return [...new Set(models.map((model) => model.trim()).filter(Boolean))];
+}
+
+async function requestOpenRouter(apiKey: string, model: string, prompt: string): Promise<AttemptResult> {
+  try {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL || "https://relay-desk-mjq6.vercel.app",
+        "X-Title": "RelayDesk",
+      },
+      signal: AbortSignal.timeout(12_000),
+      body: JSON.stringify({
+        model,
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.2,
+        max_tokens: 240,
+      }),
+    });
+
+    const raw = await response.text();
+    let payload: OpenRouterPayload = {};
+    try { payload = raw ? JSON.parse(raw) as OpenRouterPayload : {}; } catch { payload = {}; }
+    if (!response.ok) return {
+      ok: false,
+      timedOut: false,
+      status: response.status,
+      reason: payload.error?.message || raw.slice(0, 400) || response.statusText || "OpenRouter request failed",
+    };
+    const draft = payload.choices?.[0]?.message?.content?.trim();
+    if (!draft) return { ok: false, timedOut: false, status: response.status, reason: "OpenRouter returned no reply text" };
+    return { ok: true, draft, model: payload.model || model, provider: "openrouter" };
+  } catch (error) {
+    const timedOut = error instanceof DOMException && error.name === "TimeoutError";
+    return { ok: false, timedOut, reason: timedOut ? "OpenRouter timed out" : error instanceof Error ? error.message : "OpenRouter network error" };
+  }
+}
+
+async function requestGemini(apiKey: string, model: string, prompt: string): Promise<AttemptResult> {
+  try {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
+      signal: AbortSignal.timeout(15_000),
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 240,
+        },
+      }),
+    });
+
+    const raw = await response.text();
+    let payload: GeminiPayload = {};
+    try { payload = raw ? JSON.parse(raw) as GeminiPayload : {}; } catch { payload = {}; }
+    if (!response.ok) return {
+      ok: false,
+      timedOut: false,
+      status: response.status,
+      reason: payload.error?.message || raw.slice(0, 400) || response.statusText || "Gemini request failed",
+    };
+    const draft = payload.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("").trim();
+    if (!draft) return { ok: false, timedOut: false, status: response.status, reason: "Gemini returned no reply text" };
+    return { ok: true, draft, model: payload.modelVersion || model, provider: "gemini" };
+  } catch (error) {
+    const timedOut = error instanceof DOMException && error.name === "TimeoutError";
+    return { ok: false, timedOut, reason: timedOut ? "Gemini timed out" : error instanceof Error ? error.message : "Gemini network error" };
+  }
 }
 
 export async function POST(request: Request) {
@@ -61,73 +144,53 @@ export async function POST(request: Request) {
   if (!membership) return respond({ error: "Forbidden", requestId }, { status: 403, headers: rateLimitHeaders(limited) });
 
   const [{ data: messages }, { data: articles }] = await Promise.all([
-    db.from("messages")
-      .select("sender_type,body,created_at")
-      .eq("conversation_id", conversation.id)
-      .order("created_at")
-      .limit(60),
-    db.from("kb_articles")
-      .select("title,excerpt,body_html")
-      .eq("workspace_id", conversation.workspace_id)
-      .not("published_at", "is", null)
-      .limit(8),
+    db.from("messages").select("sender_type,body,created_at").eq("conversation_id", conversation.id).order("created_at").limit(40),
+    db.from("kb_articles").select("title,excerpt,body_html").eq("workspace_id", conversation.workspace_id).not("published_at", "is", null).limit(6),
   ]);
 
   if (!messages?.length) return respond({ error: "Conversation is empty", requestId }, { status: 404, headers: rateLimitHeaders(limited) });
 
   const safeFallback = fallbackDraft(messages as MessageRow[], conversation.subject);
-  const apiKey = process.env.OPENROUTER_API_KEY?.trim();
-  const model = process.env.OPENROUTER_MODEL?.trim() || "openrouter/free";
-  if (!apiKey) {
-    logFailure({ event: "missing_openrouter_api_key", requestId, model });
-    return respond({ draft: safeFallback, fallback: true, fallbackReason: "OPENROUTER_API_KEY is missing", requestId }, { headers: rateLimitHeaders(limited) });
-  }
+  const openRouterKey = process.env.OPENROUTER_API_KEY?.trim();
+  const openRouterModels = uniqueModels([
+    process.env.OPENROUTER_MODEL?.trim() || "openrouter/free",
+    process.env.OPENROUTER_FALLBACK_MODEL?.trim() || "openrouter/free",
+  ]);
+  const geminiKey = process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim();
+  const geminiModels = uniqueModels([
+    process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash",
+    process.env.GEMINI_FALLBACK_MODEL?.trim() || "gemini-2.0-flash",
+  ]);
 
   const transcript = messages.map((message) => `${message.sender_type}: ${message.body}`).join("\n");
-  const knowledge = (articles ?? [])
-    .map((article) => `${article.title}: ${article.excerpt ?? article.body_html?.replace(/<[^>]*>/g, " ").slice(0, 500) ?? ""}`)
-    .join("\n");
-  const prompt = `Draft a concise, warm customer-support reply. Answer only from the conversation and knowledge excerpts. Do not invent policies, promises, refunds, dates, or completed actions. Ask one precise question when essential information is missing. Return only the reply text.\n\nSubject: ${conversation.subject ?? "Support request"}\nChannel: ${conversation.channel}\n\nConversation:\n${transcript}\n\nKnowledge excerpts:\n${knowledge || "No relevant published articles available."}`;
+  const knowledge = (articles ?? []).map((article) => `${article.title}: ${article.excerpt ?? article.body_html?.replace(/<[^>]*>/g, " ").slice(0, 400) ?? ""}`).join("\n");
+  const prompt = `Draft one concise, calm customer-support reply. Do not repeat abusive or threatening language. Use only the conversation and knowledge excerpts. Do not invent policies, promises, refunds, dates, or completed actions. Ask one precise question only when necessary. Return only the reply text.\n\nSubject: ${conversation.subject ?? "Support request"}\nChannel: ${conversation.channel}\n\nConversation:\n${transcript}\n\nKnowledge excerpts:\n${knowledge || "No published knowledge article applies."}`;
 
-  try {
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL || "https://relay-desk-mjq6.vercel.app",
-        "X-Title": "RelayDesk",
-      },
-      signal: AbortSignal.timeout(25_000),
-      body: JSON.stringify({
-        model,
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0.2,
-        max_tokens: 350,
-      }),
-    });
-
-    const raw = await response.text();
-    let payload: OpenRouterPayload = {};
-    try { payload = raw ? JSON.parse(raw) as OpenRouterPayload : {}; } catch { payload = {}; }
-
-    if (!response.ok) {
-      const message = payload.error?.message || raw.slice(0, 500) || response.statusText || "Unknown OpenRouter error";
-      logFailure({ event: "openrouter_http_error", requestId, status: response.status, code: payload.error?.code ?? null, message, model });
-      return respond({ draft: safeFallback, fallback: true, fallbackReason: message, requestId }, { headers: rateLimitHeaders(limited) });
+  if (openRouterKey) {
+    for (let attempt = 0; attempt < openRouterModels.length; attempt += 1) {
+      const result = await requestOpenRouter(openRouterKey, openRouterModels[attempt], prompt);
+      if (result.ok) return respond({ draft: result.draft, fallback: false, requestId, model: result.model, provider: result.provider, attempt: attempt + 1 }, { headers: rateLimitHeaders(limited) });
+      logFailure({ event: result.timedOut ? "openrouter_timeout" : "openrouter_attempt_failed", requestId, attempt: attempt + 1, model: openRouterModels[attempt], status: result.status ?? null, message: result.reason });
     }
-
-    const draft = payload.choices?.[0]?.message?.content?.trim();
-    if (!draft) {
-      logFailure({ event: "empty_openrouter_response", requestId, status: response.status, model, responsePreview: raw.slice(0, 500) });
-      return respond({ draft: safeFallback, fallback: true, fallbackReason: "OpenRouter returned no reply text", requestId }, { headers: rateLimitHeaders(limited) });
-    }
-
-    return respond({ draft, fallback: false, requestId, model: payload.model || model }, { headers: rateLimitHeaders(limited) });
-  } catch (error) {
-    const timedOut = error instanceof DOMException && error.name === "TimeoutError";
-    const message = error instanceof Error ? error.message : "Unknown network error";
-    logFailure({ event: timedOut ? "openrouter_timeout" : "openrouter_exception", requestId, timedOut, message, model });
-    return respond({ draft: safeFallback, fallback: true, fallbackReason: timedOut ? "OpenRouter timed out" : message, requestId }, { headers: rateLimitHeaders(limited) });
+  } else {
+    logFailure({ event: "missing_openrouter_api_key", requestId, models: openRouterModels });
   }
+
+  if (geminiKey) {
+    for (let attempt = 0; attempt < geminiModels.length; attempt += 1) {
+      const result = await requestGemini(geminiKey, geminiModels[attempt], prompt);
+      if (result.ok) return respond({ draft: result.draft, fallback: false, requestId, model: result.model, provider: result.provider, attempt: attempt + 1 }, { headers: rateLimitHeaders(limited) });
+      logFailure({ event: result.timedOut ? "gemini_timeout" : "gemini_attempt_failed", requestId, attempt: attempt + 1, model: geminiModels[attempt], status: result.status ?? null, message: result.reason });
+    }
+  } else {
+    logFailure({ event: "missing_gemini_api_key", requestId, models: geminiModels });
+  }
+
+  const missingBoth = !openRouterKey && !geminiKey;
+  return respond({
+    draft: safeFallback,
+    fallback: true,
+    fallbackReason: missingBoth ? "No AI provider key is configured" : "All configured AI providers failed",
+    requestId,
+  }, { headers: rateLimitHeaders(limited) });
 }

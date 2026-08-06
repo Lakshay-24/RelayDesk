@@ -44,14 +44,21 @@ export async function POST(req: Request) {
     const generated = await generateAndPersistSummary(conversation.id);
     await db.from("conversation_summary_jobs").delete().eq("conversation_id", conversation.id);
     return respond(
-      { summary: generated.summary, sourceMessageCount: generated.sourceMessageCount, updatedAt: generated.updatedAt, requestId },
+      {
+        summary: generated.summary,
+        sourceMessageCount: generated.sourceMessageCount,
+        updatedAt: generated.updatedAt,
+        provider: generated.provider,
+        model: generated.model,
+        fallback: generated.fallback,
+        requestId,
+      },
       { headers: rateLimitHeaders(limited) },
     );
   } catch (caught) {
     const error = caught instanceof SummaryGenerationError ? caught : new SummaryGenerationError("AI summary temporarily unavailable", true);
     console.error("AI summary failed", { requestId, retryable: error.retryable, message: error.message });
-    const status = error.message === "AI summaries are not configured" ? 503
-      : error.message === "Conversation is empty" ? 404
+    const status = error.message === "Conversation is empty" ? 404
       : error.message === "Conversation not found" ? 404
       : 503;
     return respond({ error: error.message, requestId }, { status, headers: rateLimitHeaders(limited) });
