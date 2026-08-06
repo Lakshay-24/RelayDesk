@@ -3,124 +3,29 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { BarChart3, BookOpenText, Inbox, LogOut, MessageSquareText, Settings } from "lucide-react";
+import { BarChart3, BookOpenText, Building2, Check, Inbox, LogOut, MessageSquareText, Plus, Settings, UserPlus, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
-const items = [
-  { href: "/inbox", label: "Inbox", icon: Inbox },
-  { href: "/knowledge", label: "Knowledge", icon: BookOpenText },
-  { href: "/analytics", label: "Analytics", icon: BarChart3 },
-  { href: "/settings", label: "Settings", icon: Settings },
-];
+const items=[{href:"/inbox",label:"Inbox",icon:Inbox},{href:"/knowledge",label:"Knowledge",icon:BookOpenText},{href:"/analytics",label:"Analytics",icon:BarChart3},{href:"/settings",label:"Settings",icon:Settings}];
+type WorkspaceItem={id:string;name:string;slug:string;role:"admin"|"agent"};
+type Invite={id:string;workspaceName:string;role:"admin"|"agent";expiresAt:string};
 
-export function DashboardShell({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-  const router = useRouter();
-  const supabase = useMemo(() => createClient(), []);
-  const [pendingHref, setPendingHref] = useState<string | null>(null);
-  const [signingOut, setSigningOut] = useState(false);
-
-  useEffect(() => setPendingHref(null), [pathname]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      items.forEach(({ href }) => router.prefetch(href));
-      router.prefetch("/login");
-    }, 150);
-    return () => window.clearTimeout(timer);
-  }, [router]);
-
-  async function signOut() {
-    if (signingOut) return;
-    setSigningOut(true);
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      setSigningOut(false);
-      window.alert(`Could not sign out: ${error.message}`);
-      return;
-    }
-    router.replace("/login");
-    router.refresh();
-  }
-
-  if (pathname.startsWith("/onboarding")) return <>{children}</>;
-
-  return (
-    <div className="dashboard-shell relay-shell">
-      {pendingHref || signingOut ? <div className="route-progress" aria-label="Loading page" /> : null}
-      <aside className="sidebar relay-sidebar">
-        <Link href="/inbox" className="brand relay-brand" aria-label="Open RelayDesk inbox">
-          <MessageSquareText size={21} />
-        </Link>
-
-        <nav className="nav relay-nav" aria-label="Workspace navigation">
-          {items.map(({ href, label, icon: Icon }) => {
-            const active = pathname.startsWith(href);
-            const pending = pendingHref === href;
-            return (
-              <Link
-                key={href}
-                href={href}
-                prefetch
-                aria-label={label}
-                aria-current={active ? "page" : undefined}
-                aria-busy={pending || undefined}
-                data-label={pending ? `Opening ${label}…` : label}
-                className={active ? "active" : undefined}
-                onMouseEnter={() => router.prefetch(href)}
-                onFocus={() => router.prefetch(href)}
-                onClick={() => { if (!active) setPendingHref(href); }}
-              >
-                <span className="nav-icon"><Icon size={20} /></span>
-                <span className="mobile-nav-label">{pending ? "Opening…" : label}</span>
-              </Link>
-            );
-          })}
-        </nav>
-
-        <button
-          type="button"
-          className="relay-signout"
-          aria-label="Sign out"
-          data-label={signingOut ? "Signing out…" : "Sign out"}
-          disabled={signingOut}
-          onClick={signOut}
-        >
-          <LogOut size={20} />
-          <span className="mobile-nav-label">{signingOut ? "Leaving…" : "Sign out"}</span>
-        </button>
-      </aside>
-
-      <main className="dashboard-content">{children}</main>
-
-      <style jsx global>{`
-        .relay-shell{grid-template-columns:88px minmax(0,1fr)!important;min-height:100svh}
-        .relay-sidebar{position:sticky!important;top:0!important;width:88px!important;height:100svh!important;padding:18px 12px!important;border-right:1px solid #2a2a2a;overflow:visible!important;display:flex!important;flex-direction:column}
-        .relay-brand{display:grid!important;place-items:center!important;width:52px!important;height:52px!important;margin:0 auto 24px!important;padding:0!important;border-radius:16px!important;background:#f5f5f1!important;color:#171717!important;transition:transform .16s ease,box-shadow .16s ease}
-        .relay-brand:hover{transform:translateY(-1px);box-shadow:0 8px 22px rgba(0,0,0,.28)}
-        .relay-nav{display:grid!important;gap:10px!important;justify-items:center}
-        .relay-nav a,.relay-signout{position:relative;display:grid!important;place-items:center;width:56px!important;height:56px!important;padding:0!important;border:1px solid transparent;border-radius:16px!important;color:#a7a7a7!important;background:transparent;text-decoration:none;outline:none;transition:background .14s ease,color .14s ease,border-color .14s ease,transform .14s ease,box-shadow .14s ease}
-        .relay-nav a:hover,.relay-signout:hover{background:#232323!important;color:#fff!important;border-color:#323232;transform:translateY(-1px)}
-        .relay-nav a:focus-visible,.relay-signout:focus-visible{box-shadow:0 0 0 3px rgba(120,156,255,.55)}
-        .relay-nav a.active{background:#f5f5f1!important;color:#171717!important;border-color:#f5f5f1;box-shadow:0 8px 24px rgba(0,0,0,.25)}
-        .relay-nav a.active::before{content:"";position:absolute;left:-13px;width:3px;height:24px;border-radius:0 999px 999px 0;background:#fff}
-        .nav-icon{display:grid;place-items:center}.mobile-nav-label{display:none}
-        .relay-nav a::after,.relay-signout::after{content:attr(data-label);position:absolute;z-index:20;left:66px;top:50%;transform:translateY(-50%) translateX(-4px);padding:7px 9px;border-radius:9px;background:#111;color:#fff;font-size:12px;font-weight:700;line-height:1;white-space:nowrap;opacity:0;pointer-events:none;box-shadow:0 8px 24px rgba(0,0,0,.3);transition:opacity .12s ease,transform .12s ease}
-        .relay-nav a:hover::after,.relay-nav a:focus-visible::after,.relay-signout:hover::after,.relay-signout:focus-visible::after{opacity:1;transform:translateY(-50%) translateX(0)}
-        .relay-signout{margin:auto auto 0!important;cursor:pointer}.relay-signout:disabled{opacity:.6;cursor:wait}
-        .route-progress{position:fixed;z-index:9999;top:0;left:0;height:3px;width:32%;background:#4f7cff;box-shadow:0 0 14px rgba(79,124,255,.7);animation:route-progress .9s ease-in-out infinite}
-        @keyframes route-progress{0%{transform:translateX(-110%)}100%{transform:translateX(420%)}}
-        @media(max-width:760px){
-          .relay-shell{display:block!important;padding-bottom:84px}
-          .relay-sidebar{position:fixed!important;z-index:100;left:10px!important;right:10px!important;bottom:10px!important;top:auto!important;width:auto!important;height:68px!important;padding:6px!important;border:1px solid #333!important;border-radius:20px;background:rgba(23,23,23,.96);backdrop-filter:blur(16px);box-shadow:0 14px 36px rgba(0,0,0,.34);display:grid!important;grid-template-columns:minmax(0,1fr) 56px!important;gap:4px}
-          .relay-brand{display:none!important}.relay-nav{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:4px!important;width:100%;height:100%}
-          .relay-nav a,.relay-signout{width:100%!important;height:56px!important;border-radius:15px!important;gap:2px;align-content:center;transform:none!important}
-          .relay-nav a::after,.relay-nav a.active::before,.relay-signout::after{display:none}.relay-nav a.active{box-shadow:none}
-          .relay-signout{margin:0!important}.nav-icon{height:24px}.mobile-nav-label{display:block;font-size:10px;font-weight:700;line-height:1}
-        }
-        @media(max-width:420px){.relay-sidebar{left:6px!important;right:6px!important;bottom:6px!important}.relay-nav a,.relay-signout{height:54px!important}.mobile-nav-label{font-size:9px}}
-        @media(prefers-reduced-motion:reduce){.relay-brand,.relay-nav a,.relay-signout,.relay-nav a::after{transition:none!important}.route-progress{animation:none;width:100%}}
-      `}</style>
-    </div>
-  );
+export function DashboardShell({children}:{children:React.ReactNode}){
+ const pathname=usePathname();const router=useRouter();const supabase=useMemo(()=>createClient(),[]);
+ const [pendingHref,setPendingHref]=useState<string|null>(null);const [signingOut,setSigningOut]=useState(false);const [open,setOpen]=useState(false);const [loading,setLoading]=useState(false);const [workspaces,setWorkspaces]=useState<WorkspaceItem[]>([]);const [activeId,setActiveId]=useState<string|null>(null);const [invites,setInvites]=useState<Invite[]>([]);const [error,setError]=useState("");
+ useEffect(()=>setPendingHref(null),[pathname]);
+ useEffect(()=>{const timer=window.setTimeout(()=>{items.forEach(({href})=>router.prefetch(href));router.prefetch("/login")},150);return()=>window.clearTimeout(timer)},[router]);
+ useEffect(()=>{void loadWorkspaceContext()},[]);
+ async function loadWorkspaceContext(){setLoading(true);setError("");try{const [contextResponse,inviteResponse]=await Promise.all([fetch("/api/workspaces/context",{cache:"no-store"}),fetch("/api/team/pending",{cache:"no-store"})]);const context=await contextResponse.json();const inviteJson=await inviteResponse.json();if(!contextResponse.ok)throw new Error(context.error??"Could not load workspaces");setWorkspaces(context.workspaces??[]);setActiveId(context.activeWorkspaceId??null);if(inviteResponse.ok)setInvites(inviteJson.invitations??[])}catch(caught){setError(caught instanceof Error?caught.message:"Could not load workspaces")}finally{setLoading(false)}}
+ async function switchWorkspace(workspaceId:string){if(workspaceId===activeId){setOpen(false);return}setLoading(true);const response=await fetch("/api/workspaces/context",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({workspaceId})});const json=await response.json().catch(()=>({}));if(!response.ok){setError(json.error??"Could not switch workspace");setLoading(false);return}window.location.assign("/inbox")}
+ async function acceptInvite(invitationId:string){setLoading(true);const response=await fetch("/api/team/pending",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({invitationId,action:"accept"})});const json=await response.json().catch(()=>({}));if(!response.ok){setError(json.error??"Could not accept invitation");setLoading(false);return}await fetch("/api/workspaces/context",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({workspaceId:json.workspaceId})});window.location.assign("/inbox")}
+ async function signOut(){if(signingOut)return;setSigningOut(true);const {error}=await supabase.auth.signOut();if(error){setSigningOut(false);window.alert(`Could not sign out: ${error.message}`);return}router.replace("/login");router.refresh()}
+ if(pathname.startsWith("/onboarding"))return <>{children}</>;
+ return <div className="dashboard-shell relay-shell">{pendingHref||signingOut?<div className="route-progress"/>:null}<aside className="sidebar relay-sidebar">
+  <button type="button" className="brand relay-brand" aria-label="All workspaces" data-label="All workspaces" onClick={()=>setOpen(true)}><Building2 size={21}/>{invites.length>0?<span className="invite-dot">{invites.length}</span>:null}</button>
+  <nav className="nav relay-nav" aria-label="Workspace navigation">{items.map(({href,label,icon:Icon})=>{const active=pathname.startsWith(href);return <Link key={href} href={href} data-label={label} className={active?"active":undefined} onClick={()=>{if(!active)setPendingHref(href)}}><span className="nav-icon"><Icon size={20}/></span><span className="mobile-nav-label">{label}</span></Link>})}</nav>
+  <button type="button" className="relay-signout" data-label={signingOut?"Signing out…":"Sign out"} disabled={signingOut} onClick={signOut}><LogOut size={20}/><span className="mobile-nav-label">Sign out</span></button>
+ </aside><main className="dashboard-content">{children}</main>
+ {open?<div className="workspace-backdrop" onMouseDown={event=>{if(event.target===event.currentTarget)setOpen(false)}}><section className="workspace-panel" role="dialog" aria-modal="true"><div className="workspace-panel-head"><div><p className="eyebrow">RelayDesk</p><h2>All workspaces</h2></div><button className="chip" onClick={()=>setOpen(false)}><X size={16}/>Close</button></div>{error?<p className="form-error">{error}</p>:null}{loading?<p className="muted">Loading workspaces…</p>:null}<div className="workspace-list">{workspaces.map(workspace=><button key={workspace.id} className={`workspace-row ${workspace.id===activeId?"active":""}`} onClick={()=>switchWorkspace(workspace.id)} disabled={loading}><span><strong>{workspace.name}</strong><small>{workspace.role} · /{workspace.slug}</small></span>{workspace.id===activeId?<Check size={18}/>:null}</button>)}</div>{invites.length>0?<div className="pending-box"><h3><UserPlus size={17}/>Pending invitations</h3>{invites.map(invite=><div className="invite-row" key={invite.id}><span><strong>{invite.workspaceName}</strong><small>{invite.role} access</small></span><button className="primary-button" disabled={loading} onClick={()=>acceptInvite(invite.id)}>Accept and open</button></div>)}</div>:null}<Link className="chip create-workspace-link" href="/onboarding"><Plus size={16}/>Create another workspace</Link></section></div>:null}
+ <style jsx global>{`.relay-shell{grid-template-columns:88px minmax(0,1fr)!important;min-height:100svh}.relay-sidebar{position:sticky!important;top:0!important;width:88px!important;height:100svh!important;padding:18px 12px!important;border-right:1px solid #2a2a2a;overflow:visible!important;display:flex!important;flex-direction:column}.relay-brand{position:relative;display:grid!important;place-items:center!important;width:52px!important;height:52px!important;margin:0 auto 24px!important;padding:0!important;border:0;border-radius:16px!important;background:#f5f5f1!important;color:#171717!important;cursor:pointer}.invite-dot{position:absolute;right:-5px;top:-5px;display:grid;place-items:center;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:#e5484d;color:white;font-size:11px;font-weight:800}.relay-nav{display:grid!important;gap:10px!important;justify-items:center}.relay-nav a,.relay-signout{position:relative;display:grid!important;place-items:center;width:56px!important;height:56px!important;padding:0!important;border:1px solid transparent;border-radius:16px!important;color:#a7a7a7!important;background:transparent;text-decoration:none}.relay-nav a:hover,.relay-signout:hover{background:#232323!important;color:#fff!important}.relay-nav a.active{background:#f5f5f1!important;color:#171717!important}.nav-icon{display:grid;place-items:center}.mobile-nav-label{display:none}.relay-nav a::after,.relay-signout::after,.relay-brand::after{content:attr(data-label);position:absolute;z-index:20;left:66px;top:50%;transform:translateY(-50%);padding:7px 9px;border-radius:9px;background:#111;color:#fff;font-size:12px;font-weight:700;white-space:nowrap;opacity:0;pointer-events:none}.relay-nav a:hover::after,.relay-signout:hover::after,.relay-brand:hover::after{opacity:1}.relay-signout{margin:auto auto 0!important}.route-progress{position:fixed;z-index:9999;top:0;left:0;height:3px;width:32%;background:#4f7cff;animation:route-progress .9s ease-in-out infinite}@keyframes route-progress{0%{transform:translateX(-110%)}100%{transform:translateX(420%)}}.workspace-backdrop{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.48);display:grid;place-items:center;padding:20px}.workspace-panel{width:min(560px,100%);max-height:85vh;overflow:auto;background:#fff;border-radius:22px;padding:24px;box-shadow:0 30px 80px rgba(0,0,0,.32)}.workspace-panel-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}.workspace-panel h2{margin:4px 0 18px}.workspace-list{display:grid;gap:8px}.workspace-row{width:100%;display:flex;justify-content:space-between;align-items:center;text-align:left;padding:14px 16px;border:1px solid #ddd;border-radius:14px;background:#fff}.workspace-row.active{border-color:#171717;background:#f5f5f1}.workspace-row span,.invite-row span{display:grid;gap:3px}.workspace-row small,.invite-row small{color:#707070}.pending-box{margin-top:20px;padding:16px;border-radius:16px;background:#fff8dc}.pending-box h3{display:flex;align-items:center;gap:7px;margin-top:0}.invite-row{display:flex;justify-content:space-between;align-items:center;gap:12px}.create-workspace-link{display:inline-flex!important;margin-top:18px}@media(max-width:760px){.relay-shell{display:block!important;padding-bottom:84px}.relay-sidebar{position:fixed!important;z-index:100;left:10px!important;right:10px!important;bottom:10px!important;top:auto!important;width:auto!important;height:68px!important;padding:6px!important;border:1px solid #333!important;border-radius:20px;background:#171717;display:grid!important;grid-template-columns:56px minmax(0,1fr) 56px!important;gap:4px}.relay-brand{width:56px!important;height:56px!important;margin:0!important}.relay-nav{grid-template-columns:repeat(4,minmax(0,1fr))!important;width:100%}.relay-nav a,.relay-signout{width:100%!important;height:56px!important}.relay-signout{margin:0!important}.mobile-nav-label{display:block;font-size:9px}.relay-nav a::after,.relay-signout::after,.relay-brand::after{display:none}}`}</style></div>
 }
