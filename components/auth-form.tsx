@@ -30,9 +30,7 @@ function decodeOAuthValue(value: string | null) {
       const next = decodeURIComponent(decoded);
       if (next === decoded) break;
       decoded = next;
-    } catch {
-      break;
-    }
+    } catch { break; }
   }
   return decoded;
 }
@@ -51,16 +49,10 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
     const description = decodeOAuthValue(search.get("error_description"));
     const oauthError = description || decodeOAuthValue(search.get("error"));
     if (!oauthError) return;
-
     const errorCode = decodeOAuthValue(search.get("error_code"));
     const providerError = decodeOAuthValue(search.get("provider_error"));
     const details = [errorCode, providerError].filter(Boolean);
-    const providerExchangeFailure = errorCode === "unexpected_failure" && /exchange external code/i.test(oauthError);
-    const readable = providerExchangeFailure
-      ? "Google sign-in reached Supabase, but Supabase could not exchange Google's authorization code. Check the Google provider credentials and the matching Supabase Auth Log event."
-      : oauthError;
-
-    setError(details.length ? `${readable} (${details.join(" · ")})` : readable);
+    setError(details.length ? `${oauthError} (${details.join(" · ")})` : oauthError);
   }, []);
 
   async function signInWithGoogle() {
@@ -69,10 +61,10 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
     setNotice("");
     try {
       const supabase = createClient();
-      const redirectTo = `${appOrigin()}/auth/complete?next=/inbox`;
+      const redirectTo = `${appOrigin()}/auth/callback?next=/inbox`;
       const { error: authError } = await supabase.auth.signInWithOAuth({
         provider: "google",
-        options: { redirectTo, queryParams: { access_type: "offline", prompt: "consent" } },
+        options: { redirectTo },
       });
       if (authError) {
         setError(authError.message);
@@ -99,7 +91,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
         router.refresh();
         return;
       }
-      const redirectTo = `${appOrigin()}/auth/complete?next=/onboarding`;
+      const redirectTo = `${appOrigin()}/auth/callback?next=/onboarding`;
       const { data, error: authError } = await supabase.auth.signUp({ email: email.trim(), password, options: { emailRedirectTo: redirectTo } });
       if (authError) { setError(authError.message); return; }
       if (!data.session) { setNotice("Account created. Confirm your email to continue to workspace setup."); return; }
@@ -107,9 +99,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
       router.refresh();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Authentication failed unexpectedly.");
-    } finally {
-      setBusy(false);
-    }
+    } finally { setBusy(false); }
   }
 
   return (

@@ -7,7 +7,30 @@ function normalizeHost(value: string | null) {
   return (value ?? "").split(":")[0].trim().toLowerCase();
 }
 
-export default async function Home() {
+function safeNext(value: string | string[] | undefined) {
+  const next = Array.isArray(value) ? value[0] : value;
+  if (!next || !next.startsWith("/") || next.startsWith("//")) return "/inbox";
+  return next;
+}
+
+export default async function Home({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const params = await searchParams;
+  const code = Array.isArray(params.code) ? params.code[0] : params.code;
+  const error = Array.isArray(params.error) ? params.error[0] : params.error;
+  const errorDescription = Array.isArray(params.error_description) ? params.error_description[0] : params.error_description;
+
+  if (code) {
+    const query = new URLSearchParams({ code, next: safeNext(params.next) });
+    redirect(`/auth/callback?${query.toString()}`);
+  }
+
+  if (error || errorDescription) {
+    const query = new URLSearchParams();
+    if (error) query.set("error", error);
+    if (errorDescription) query.set("error_description", errorDescription);
+    redirect(`/login?${query.toString()}`);
+  }
+
   const requestHeaders = await headers();
   const hostname = normalizeHost(requestHeaders.get("x-forwarded-host") || requestHeaders.get("host"));
   const appHost = normalizeHost(process.env.NEXT_PUBLIC_APP_URL ? new URL(process.env.NEXT_PUBLIC_APP_URL).host : null);
