@@ -14,7 +14,7 @@ const actionSchema = z.object({
   enabled: z.boolean().optional(),
 });
 
-async function getAdminContext() {
+async function getMemberContext() {
   const db = await createClient();
   const { data: { user } } = await db.auth.getUser();
   if (!user) return { db, user: null, membership: null };
@@ -22,15 +22,14 @@ async function getAdminContext() {
     .from("memberships")
     .select("id,workspace_id,role")
     .eq("user_id", user.id)
-    .eq("role", "admin")
     .limit(1)
     .maybeSingle();
   return { db, user, membership };
 }
 
 export async function GET() {
-  const { db, membership } = await getAdminContext();
-  if (!membership) return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+  const { db, membership } = await getMemberContext();
+  if (!membership) return NextResponse.json({ error: "Workspace access required" }, { status: 403 });
   const { data, error } = await db
     .from("outbound_webhooks")
     .select("id,url,events,enabled,created_at,updated_at")
@@ -43,8 +42,8 @@ export async function GET() {
 export async function POST(request: Request) {
   const parsed = createSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid webhook" }, { status: 400 });
-  const { db, membership } = await getAdminContext();
-  if (!membership) return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+  const { db, membership } = await getMemberContext();
+  if (!membership) return NextResponse.json({ error: "Workspace access required" }, { status: 403 });
 
   const secret = randomBytes(32).toString("hex");
   const { data, error } = await db
@@ -59,8 +58,8 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   const parsed = actionSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid webhook action" }, { status: 400 });
-  const { db, membership } = await getAdminContext();
-  if (!membership) return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+  const { db, membership } = await getMemberContext();
+  if (!membership) return NextResponse.json({ error: "Workspace access required" }, { status: 403 });
 
   const { data: webhook } = await db
     .from("outbound_webhooks")

@@ -30,7 +30,6 @@ export async function PUT(request: Request) {
   if (!parsed.success) return Response.json({ error: "Invalid SLA policy", details: parsed.error.flatten() }, { status: 400 });
   const result = await context();
   if ("error" in result) return result.error;
-  if (result.membership.role !== "admin") return Response.json({ error: "Only admins can update SLA policy" }, { status: 403 });
   const { data, error } = await result.db.from("workspace_sla_policies").upsert({
     workspace_id: result.membership.workspace_id,
     first_response_minutes: parsed.data.firstResponseMinutes,

@@ -175,9 +175,9 @@ export function SettingsWorkspace({ workspace, membership, initialDomains, inbou
       <div className="section-card invite-card">
         <h3><UserPlus size={17} />Invite teammate</h3>
         {banner(inviteNotice)}
-        <label>Email<input type="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="agent@company.com" disabled={!isAdmin || Boolean(action)} /></label>
-        <label>Role<select value={inviteRole} onChange={event => setInviteRole(event.target.value as "admin" | "agent")} disabled={!isAdmin || Boolean(action)}><option value="agent">Agent</option><option value="admin">Admin</option></select></label>
-        <button className="primary-button" disabled={!isAdmin || Boolean(action) || !email.trim()} onClick={() => void invite()}>{action === "invite" ? "Sending…" : "Send invite"}</button>
+        <label>Email<input type="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="agent@company.com" disabled={Boolean(action)} /></label>
+        <label>Role<select value={inviteRole} onChange={event => setInviteRole(event.target.value as "admin" | "agent")} disabled={Boolean(action)}><option value="agent">Agent</option><option value="admin">Admin</option></select></label>
+        <button className="primary-button" disabled={Boolean(action) || !email.trim()} onClick={() => void invite()}>{action === "invite" ? "Sending…" : "Send invite"}</button>
 
         <div className="pending-wrap">
           <button type="button" className="pending-toggle" aria-expanded={pendingOpen} onClick={() => setPendingOpen(open => !open)}>
@@ -187,7 +187,7 @@ export function SettingsWorkspace({ workspace, membership, initialDomains, inbou
           {pendingOpen ? <div className="pending-list">
             {pendingInvitations.length ? pendingInvitations.map(invite => <div className="pending-row" key={invite.id}>
               <div><strong>{invite.email}</strong><p>{invite.role} · expires {new Date(invite.expires_at).toLocaleDateString()}</p></div>
-              <button type="button" className="revoke-button" disabled={!isAdmin || Boolean(action)} onClick={() => void revokeInvitation(invite)}>{action === `invite-${invite.id}` ? "Revoking…" : "Revoke"}</button>
+              <button type="button" className="revoke-button" disabled={Boolean(action)} onClick={() => void revokeInvitation(invite)}>{action === `invite-${invite.id}` ? "Revoking…" : "Revoke"}</button>
             </div>) : <p className="muted pending-empty">No pending invitations.</p>}
           </div> : null}
         </div>
@@ -205,18 +205,18 @@ export function SettingsWorkspace({ workspace, membership, initialDomains, inbou
             {isAdmin && !self ? <button className="chip danger-chip" disabled={Boolean(action) || onlyAdmin} onClick={() => void removeMember(member)}><Trash2 size={14} />Remove</button> : null}
           </div>;
         })}
-        <p className="muted">Your own role cannot be changed here. Use <strong>Switch → Workspaces → Leave</strong> to leave explicitly.</p>
+        <p className="muted">Role changes and member removal remain admin-only.</p>
       </div>
 
       <CannedResponsesManager />
-      <WebhooksManager isAdmin={isAdmin} />
-      <ApiAccessManager isAdmin={isAdmin} />
+      <WebhooksManager isAdmin={true} />
+      <ApiAccessManager isAdmin={true} />
 
       <div className="section-card domain-card">
         <h3><Globe2 size={17} />Custom help domain</h3>
         {banner(domainNotice)}
         <label>Hostname<input value={hostname} onChange={event => setHostname(event.target.value.toLowerCase().trim())} placeholder="help.company.com" /></label>
-        <button className="primary-button" disabled={!isAdmin || Boolean(action) || !hostname} onClick={() => void addDomain()}>{action === "domain" ? "Connecting…" : "Connect domain"}</button>
+        <button className="primary-button" disabled={Boolean(action) || !hostname} onClick={() => void addDomain()}>{action === "domain" ? "Connecting…" : "Connect domain"}</button>
         {domains.map(domain => <div className="domain-row" key={domain.id}><strong>{domain.hostname}</strong><span>{domain.status}</span></div>)}
       </div>
     </div>

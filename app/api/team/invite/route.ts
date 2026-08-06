@@ -23,14 +23,13 @@ export async function DELETE(request: Request) {
   const { data: { user } } = await db.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data: admin } = await db
+  const { data: membership } = await db
     .from("memberships")
     .select("id")
     .eq("workspace_id", parsed.data.workspaceId)
     .eq("user_id", user.id)
-    .eq("role", "admin")
     .maybeSingle();
-  if (!admin) return NextResponse.json({ error: "Only workspace admins can revoke invitations." }, { status: 403 });
+  if (!membership) return NextResponse.json({ error: "Workspace access required." }, { status: 403 });
 
   const { data: invitation, error: lookupError } = await db
     .from("invitations")
@@ -61,14 +60,13 @@ export async function POST(request: Request) {
   const { data: { user } } = await db.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data: admin } = await db
+  const { data: membership } = await db
     .from("memberships")
     .select("id,workspaces(name)")
     .eq("workspace_id", parsed.data.workspaceId)
     .eq("user_id", user.id)
-    .eq("role", "admin")
     .maybeSingle();
-  if (!admin) return NextResponse.json({ error: "Only workspace admins can invite teammates." }, { status: 403 });
+  if (!membership) return NextResponse.json({ error: "Workspace access required." }, { status: 403 });
 
   const email = parsed.data.email.trim().toLowerCase();
   if (user.email?.toLowerCase() === email) {
@@ -116,7 +114,7 @@ export async function POST(request: Request) {
 
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin).replace(/\/$/, "");
   const inviteUrl = `${appUrl}/invite/${token}`;
-  const workspace = Array.isArray(admin.workspaces) ? admin.workspaces[0] : admin.workspaces;
+  const workspace = Array.isArray(membership.workspaces) ? membership.workspaces[0] : membership.workspaces;
 
   const { error: emailError } = await authAdmin.auth.admin.inviteUserByEmail(email, {
     redirectTo: inviteUrl,
