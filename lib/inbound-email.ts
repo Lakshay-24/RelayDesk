@@ -39,6 +39,37 @@ async function resolveWorkspaceId(recipient: string) {
   return workspace.id as string;
 }
 
+async function resolveContact(workspaceId: string, sender: string, displayName: string | null) {
+  const db = createAdminClient();
+  const { data: existing, error: lookupError } = await db
+    .from("contacts")
+    .select("*")
+    .eq("workspace_id", workspaceId)
+    .ilike("email", sender)
+    .maybeSingle();
+  if (lookupError) throw new Error(`Could not look up sender: ${lookupError.message}`);
+
+  const now = new Date().toISOString();
+  if (existing) {
+    const { data: updated, error } = await db
+      .from("contacts")
+      .update({ name: displayName || existing.name, email: sender, last_seen_at: now })
+      .eq("id", existing.id)
+      .select()
+      .single();
+    if (error || !updated) throw new Error(`Could not update sender: ${error?.message ?? "Unknown error"}`);
+    return updated;
+  }
+
+  const { data: created, error } = await db
+    .from("contacts")
+    .insert({ workspace_id: workspaceId, email: sender, name: displayName, last_seen_at: now })
+    .select()
+    .single();
+  if (error || !created) throw new Error(`Could not create sender: ${error?.message ?? "Unknown error"}`);
+  return created;
+}
+
 export async function processInboundEmail(input: InboundEmailInput) {
   const db = createAdminClient();
   const recipient = normalizeAddress(input.to);
@@ -57,15 +88,7 @@ export async function processInboundEmail(input: InboundEmailInput) {
   const displayName = input.from.includes("<")
     ? input.from.split("<")[0].trim().replace(/^"|"$/g, "")
     : null;
-  const { data: contact, error: contactError } = await db
-    .from("contacts")
-    .upsert(
-      { workspace_id: workspaceId, email: sender, name: displayName, last_seen_at: new Date().toISOString() },
-      { onConflict: "workspace_id,email" },
-    )
-    .select()
-    .single();
-  if (contactError || !contact) throw new Error("Could not resolve sender");
+  const contact = await resolveContact(workspaceId, sender, displayName);
 
   let conversationId: string | undefined;
   const refs = [input.inReplyTo, ...(input.references ?? [])].filter(Boolean) as string[];
@@ -92,7 +115,7 @@ export async function processInboundEmail(input: InboundEmailInput) {
       })
       .select()
       .single();
-    if (error || !conversation) throw new Error("Could not create conversation");
+    if (error || !conversation) throw new Error(`Could not create conversation: ${error?.message ?? "Unknown error"}`);
     conversationId = conversation.id;
   }
 
@@ -111,7 +134,7 @@ export async function processInboundEmail(input: InboundEmailInput) {
   });
   if (messageError) {
     if (messageError.code === "23505") return { duplicate: true, conversationId };
-    throw new Error("Could not store message");
+    throw new Error(`Could not store message: ${messageError.message}`);
   }
 
   await db
