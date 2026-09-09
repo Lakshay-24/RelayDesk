@@ -1,4 +1,0 @@
-import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-
-export async function GET(){const db=await createClient();const {data:{user}}=await db.auth.getUser();if(!user)return NextResponse.json({error:"Unauthorized"},{status:401});const {data:membership}=await db.from("memberships").select("workspace_id,role").eq("user_id",user.id).order("created_at").limit(1).maybeSingle();if(!membership||membership.role!=="admin")return NextResponse.json({error:"Only admins can view inbound diagnostics."},{status:403});const {data:events,error}=await db.from("inbound_email_events").select("id,source,stage,status,external_id,detail,created_at").eq("workspace_id",membership.workspace_id).order("created_at",{ascending:false}).limit(30);if(error)return NextResponse.json({error:error.message},{status:500});return NextResponse.json({events:events??[],checkedAt:new Date().toISOString()});}

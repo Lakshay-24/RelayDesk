@@ -1,6 +1,0 @@
-import { NextResponse } from "next/server";
-import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
-
-const schema=z.object({workspaceId:z.string().uuid()});
-export async function POST(request:Request){const parsed=schema.safeParse(await request.json().catch(()=>null));if(!parsed.success)return NextResponse.json({error:"Invalid workspace."},{status:400});const db=await createClient();const {data:{user}}=await db.auth.getUser();if(!user)return NextResponse.json({error:"Unauthorized"},{status:401});const {data:membership}=await db.from("memberships").select("id,role").eq("workspace_id",parsed.data.workspaceId).eq("user_id",user.id).maybeSingle();if(!membership)return NextResponse.json({error:"Membership not found."},{status:404});if(membership.role==="admin"){const {count}=await db.from("memberships").select("id",{count:"exact",head:true}).eq("workspace_id",parsed.data.workspaceId).eq("role","admin");if((count??0)<=1)return NextResponse.json({error:"Promote another admin before leaving this workspace."},{status:400});}const {error}=await db.from("memberships").delete().eq("id",membership.id);if(error)return NextResponse.json({error:error.message},{status:500});return NextResponse.json({ok:true});}
