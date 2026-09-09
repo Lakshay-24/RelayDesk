@@ -12,7 +12,10 @@ export default function SupportPage() {
         For authorization issues, sign in again through the RelayDesk OAuth flow. Device credentials can be rotated or revoked without changing the user account.
       </p>
       <p>
-        OpenAI reviewers can use the review thread attached to the plugin submission for setup or test-account questions. Public support requests are handled by the verified RelayDesk publisher through the distribution channel where RelayDesk was installed.
+        For public support, bug reports, or reviewer setup questions, open an issue in the public RelayDesk repository.
+      </p>
+      <p>
+        <a className="button secondary" href="https://github.com/Lakshay-24/RelayDesk/issues" target="_blank" rel="noreferrer">Open RelayDesk support issue</a>
       </p>
       <p className="muted"><Link href="/privacy">Privacy</Link> · <Link href="/terms">Terms</Link> · <Link href="/">Home</Link></p>
     </main>
