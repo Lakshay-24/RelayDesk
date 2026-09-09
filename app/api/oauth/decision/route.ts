@@ -16,8 +16,7 @@ export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
-    const next = `/oauth/consent?authorization_id=${encodeURIComponent(authorizationId)}`;
-    return NextResponse.redirect(new URL(`/login?next=${encodeURIComponent(next)}`, request.url), 303);
+    return NextResponse.redirect(new URL(`/oauth/login?authorization_id=${encodeURIComponent(authorizationId)}`, request.url), 303);
   }
 
   const result = decision === "approve"
