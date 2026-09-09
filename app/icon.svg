@@ -1,6 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="RelayDesk">
   <rect width="64" height="64" rx="16" fill="#171717"/>
-  <path d="M18 18h28v20a8 8 0 0 1-8 8h-7l-9 7v-7h-4V18Z" fill="#F7F7F3"/>
-  <path d="M25 28h14M25 35h10" stroke="#171717" stroke-width="4" stroke-linecap="round"/>
-  <circle cx="46" cy="18" r="6" fill="#6F8CFF" stroke="#171717" stroke-width="3"/>
+  <rect x="12" y="14" width="40" height="30" rx="7" fill="#F7F7F3"/>
+  <path d="M21 25l6 5-6 5" fill="none" stroke="#171717" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M31 35h10" stroke="#171717" stroke-width="4" stroke-linecap="round"/>
+  <path d="M24 51h16" stroke="#F7F7F3" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="49" cy="17" r="7" fill="#6F8CFF" stroke="#171717" stroke-width="3"/>
+  <path d="M45.5 17h7M49 13.5v7" stroke="#F7F7F3" stroke-width="2.5" stroke-linecap="round"/>
 </svg>
