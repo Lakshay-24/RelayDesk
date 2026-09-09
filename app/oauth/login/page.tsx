@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
-export default function OAuthLoginPage() {
+function OAuthLoginForm() {
   const search = useSearchParams();
   const router = useRouter();
   const authorizationId = search.get("authorization_id") ?? "";
@@ -54,4 +54,8 @@ export default function OAuthLoginPage() {
       <button type="button" className="google-auth-button" disabled={busy} onClick={google}>Continue with Google</button>
     </section>
   </main>;
+}
+
+export default function OAuthLoginPage() {
+  return <Suspense fallback={null}><OAuthLoginForm /></Suspense>;
 }
