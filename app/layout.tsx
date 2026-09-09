@@ -7,7 +7,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "RelayDesk",
-  description: "AI-native customer communication platform",
+  description: "Secure remote MCP control for computers you own",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
