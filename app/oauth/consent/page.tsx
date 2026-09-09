@@ -13,10 +13,7 @@ export default async function ConsentPage({
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
-    const next = `/oauth/consent?authorization_id=${encodeURIComponent(authorizationId)}`;
-    redirect(`/login?next=${encodeURIComponent(next)}`);
-  }
+  if (!user) redirect(`/oauth/login?authorization_id=${encodeURIComponent(authorizationId)}`);
 
   const { data: details, error } = await supabase.auth.oauth.getAuthorizationDetails(authorizationId);
   if (error || !details) {
