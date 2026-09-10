@@ -1,1 +1,1 @@
-relaydesk-static-health-ok
+relaydesk-facade-ok

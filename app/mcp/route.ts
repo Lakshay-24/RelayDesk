@@ -1,33 +1,4 @@
-const BACKEND = "https://atuvyeoctkevglimkmka.supabase.co/functions/v1/mcp";
-const PUBLIC_ORIGIN = "https://relay-desk-mjq6.vercel.app";
-
-async function proxy(request: Request) {
-  const headers = new Headers();
-  for (const name of ["authorization", "content-type", "accept", "mcp-protocol-version", "mcp-session-id"]) {
-    const value = request.headers.get(name);
-    if (value) headers.set(name, value);
-  }
-
-  const upstream = await fetch(BACKEND, {
-    method: request.method,
-    headers,
-    body: request.method === "GET" || request.method === "HEAD" ? undefined : await request.arrayBuffer(),
-    cache: "no-store",
-  });
-
-  const out = new Headers();
-  for (const name of ["content-type", "cache-control", "mcp-session-id"]) {
-    const value = upstream.headers.get(name);
-    if (value) out.set(name, value);
-  }
-  if (upstream.status === 401) {
-    out.set("www-authenticate", `Bearer resource_metadata="${PUBLIC_ORIGIN}/.well-known/oauth-protected-resource"`);
-  }
-
-  return new Response(await upstream.arrayBuffer(), { status: upstream.status, headers: out });
-}
-
-export const dynamic = "force-dynamic";
-export const POST = proxy;
-export const GET = proxy;
-export const DELETE = proxy;
+const BACKEND="https://atuvyeoctkevglimkmka.supabase.co/functions/v1/mcp";
+const PUBLIC_ORIGIN="https://relay-desk-mjq6.vercel.app";
+async function proxy(request:Request){const headers=new Headers();for(const name of ["authorization","content-type","accept","mcp-protocol-version","mcp-session-id"]){const value=request.headers.get(name);if(value)headers.set(name,value)}const upstream=await fetch(BACKEND,{method:request.method,headers,body:request.method==="GET"||request.method==="HEAD"?undefined:await request.arrayBuffer(),cache:"no-store"});const out=new Headers();for(const name of ["content-type","cache-control","mcp-session-id"]){const value=upstream.headers.get(name);if(value)out.set(name,value)}if(upstream.status===401)out.set("www-authenticate",`Bearer resource_metadata="${PUBLIC_ORIGIN}/.well-known/oauth-protected-resource"`);return new Response(await upstream.arrayBuffer(),{status:upstream.status,headers:out})}
+export const dynamic="force-dynamic";export const POST=proxy;export const GET=proxy;export const DELETE=proxy;

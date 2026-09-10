@@ -1,64 +1,7 @@
 "use client";
-
-import { Suspense, useEffect, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
-
-const INTERNAL_RELAYDESK_EMAIL = "lakshaygoel12@gmail.com";
-
-function OAuthLoginForm() {
-  const search = useSearchParams();
-  const authorizationId = search.get("authorization_id") ?? "";
-  const started = useRef(false);
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(true);
-
-  async function continueWithGoogle() {
-    if (!authorizationId) {
-      setError("Missing authorization_id");
-      setBusy(false);
-      return;
-    }
-
-    setBusy(true);
-    setError("");
-    const supabase = createClient();
-    const redirectTo = `${window.location.origin}/oauth/callback?authorization_id=${encodeURIComponent(authorizationId)}`;
-    const { error: authError } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo,
-        queryParams: { login_hint: INTERNAL_RELAYDESK_EMAIL },
-      },
-    });
-
-    if (authError) {
-      setError(authError.message);
-      setBusy(false);
-    }
-  }
-
-  useEffect(() => {
-    if (started.current) return;
-    started.current = true;
-    void continueWithGoogle();
-  }, [authorizationId]);
-
-  return (
-    <main style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 24 }}>
-      <section className="auth-card">
-        <div className="eyebrow">RelayDesk</div>
-        <h1>Connecting to ChatGPT</h1>
-        <p className="muted auth-intro">Continuing as <strong>{INTERNAL_RELAYDESK_EMAIL}</strong>.</p>
-        {error && <p className="form-error" role="alert">{error}</p>}
-        <button type="button" className="primary-button auth-submit" disabled={busy} onClick={continueWithGoogle}>
-          {busy ? "Opening Google…" : "Try again"}
-        </button>
-      </section>
-    </main>
-  );
-}
-
-export default function OAuthLoginPage() {
-  return <Suspense fallback={null}><OAuthLoginForm /></Suspense>;
-}
+import {Suspense,useState} from "react";import {useRouter,useSearchParams} from "next/navigation";import {createClient} from "@/lib/supabase/client";
+function Form(){const q=useSearchParams();const router=useRouter();const authorizationId=q.get("authorization_id")??"";const [email,setEmail]=useState("");const [password,setPassword]=useState("");const [error,setError]=useState(q.get("error")?"Sign-in failed. Please try again.":"");const [busy,setBusy]=useState(false);const consent=`/oauth/consent?authorization_id=${encodeURIComponent(authorizationId)}`;
+async function passwordSignIn(e:React.FormEvent){e.preventDefault();if(!authorizationId)return setError("Missing authorization request. Restart connection from ChatGPT.");setBusy(true);setError("");const s=createClient();const {data,error:a}=await s.auth.signInWithPassword({email:email.trim(),password});if(a||!data.session){setError("Invalid email or password.");setBusy(false);return}router.replace(consent);router.refresh()}
+async function google(){if(!authorizationId)return setError("Missing authorization request. Restart connection from ChatGPT.");setBusy(true);setError("");const s=createClient();const redirectTo=`${window.location.origin}/oauth/callback?authorization_id=${encodeURIComponent(authorizationId)}`;const {error:a}=await s.auth.signInWithOAuth({provider:"google",options:{redirectTo}});if(a){setError("Google sign-in could not start.");setBusy(false)}}
+return <main className="shell"><section className="card"><div className="eyebrow">RelayDesk</div><h1>Sign in to authorize</h1><p className="lead">Authenticate before approving this ChatGPT connection.</p>{error&&<p className="error">{error}</p>}<div className="actions"><button className="primary" type="button" disabled={busy} onClick={google}>{busy?"Opening…":"Continue with Google"}</button></div><div className="divider"/><details><summary>Reviewer / email sign-in</summary><form className="stack" style={{marginTop:16}} onSubmit={passwordSignIn}><label className="field">Email<input type="email" value={email} onChange={e=>setEmail(e.target.value)} required/></label><label className="field">Password<input type="password" value={password} onChange={e=>setPassword(e.target.value)} required/></label><button disabled={busy}>Sign in</button></form></details></section></main>}
+export default function Login(){return <Suspense fallback={null}><Form/></Suspense>}

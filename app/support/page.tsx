@@ -1,23 +1,2 @@
 import Link from "next/link";
-
-export default function SupportPage() {
-  return (
-    <main className="landing">
-      <div className="landing-badge">RelayDesk Support</div>
-      <h1>Support and review help</h1>
-      <p>
-        RelayDesk is intended only for computers deliberately paired by their owner. If a device appears offline, restart the local RelayDesk agent and confirm the machine has internet access before retrying.
-      </p>
-      <p>
-        For authorization issues, sign in again through the RelayDesk OAuth flow. Device credentials can be rotated or revoked without changing the user account.
-      </p>
-      <p>
-        For public support, bug reports, or reviewer setup questions, open an issue in the public RelayDesk repository.
-      </p>
-      <p>
-        <a className="button secondary" href="https://github.com/Lakshay-24/RelayDesk/issues" target="_blank" rel="noreferrer">Open RelayDesk support issue</a>
-      </p>
-      <p className="muted"><Link href="/privacy">Privacy</Link> · <Link href="/terms">Terms</Link> · <Link href="/">Home</Link></p>
-    </main>
-  );
-}
+export default function Support(){return <main className="shell"><section className="card"><div className="eyebrow">RelayDesk Support</div><h1>Setup and support</h1><p className="lead">RelayDesk only operates computers deliberately paired by their owner. Authentication begins from a compatible MCP client such as ChatGPT; this website does not expose a standalone control dashboard.</p><p className="muted">If a paired device is offline, start its RelayDesk agent and confirm network access. For OAuth problems, restart the connection from ChatGPT so a fresh authorization request is created.</p><div className="actions"><a className="button primary" href="https://github.com/Lakshay-24/RelayDesk/issues">Open support issue</a></div><div className="links"><Link href="/">Home</Link><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link></div></section></main>}
