@@ -4,11 +4,13 @@ import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
+const INTERNAL_RELAYDESK_EMAIL = "lakshaygoel12@gmail.com";
+
 function OAuthLoginForm() {
   const search = useSearchParams();
   const router = useRouter();
   const authorizationId = search.get("authorization_id") ?? "";
-  const [email, setEmail] = useState("");
+  const [email] = useState(INTERNAL_RELAYDESK_EMAIL);
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -20,7 +22,7 @@ function OAuthLoginForm() {
     if (!authorizationId) return setError("Missing authorization_id");
     setBusy(true); setError("");
     const supabase = createClient();
-    const { data, error: authError } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
     if (authError || !data.session) {
       setError(authError?.message ?? "Sign-in failed");
       setBusy(false);
@@ -35,7 +37,10 @@ function OAuthLoginForm() {
     setBusy(true); setError("");
     const supabase = createClient();
     const redirectTo = `${window.location.origin}/oauth/callback?authorization_id=${encodeURIComponent(authorizationId)}`;
-    const { error: authError } = await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo } });
+    const { error: authError } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo, queryParams: { login_hint: INTERNAL_RELAYDESK_EMAIL } },
+    });
     if (authError) { setError(authError.message); setBusy(false); }
   }
 
@@ -45,7 +50,7 @@ function OAuthLoginForm() {
       <h1>Sign in to authorize</h1>
       <p className="muted auth-intro">Authenticate before approving this OAuth request.</p>
       <form className="form-stack" onSubmit={submit}>
-        <label>Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
+        <label>Email<input type="email" value={email} readOnly /></label>
         <label>Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
         {error && <p className="form-error" role="alert">{error}</p>}
         <button className="primary-button auth-submit" disabled={busy}>{busy ? "Please wait…" : "Sign in"}</button>
