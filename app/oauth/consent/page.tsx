@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
+const INTERNAL_RELAYDESK_EMAIL = "lakshaygoel12@gmail.com";
+
 export default async function ConsentPage({
   searchParams,
 }: {
@@ -13,7 +15,10 @@ export default async function ConsentPage({
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect(`/oauth/login?authorization_id=${encodeURIComponent(authorizationId)}`);
+  if (!user || user.email?.toLowerCase() !== INTERNAL_RELAYDESK_EMAIL) {
+    if (user) await supabase.auth.signOut();
+    redirect(`/oauth/login?authorization_id=${encodeURIComponent(authorizationId)}&email=${encodeURIComponent(INTERNAL_RELAYDESK_EMAIL)}`);
+  }
 
   const { data: details, error } = await supabase.auth.oauth.getAuthorizationDetails(authorizationId);
   if (error || !details) {
