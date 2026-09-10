@@ -15,9 +15,22 @@ export default async function ConsentPage({
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user || user.email?.toLowerCase() !== INTERNAL_RELAYDESK_EMAIL) {
-    if (user) await supabase.auth.signOut();
-    redirect(`/oauth/login?authorization_id=${encodeURIComponent(authorizationId)}&email=${encodeURIComponent(INTERNAL_RELAYDESK_EMAIL)}`);
+  if (!user) redirect(`/oauth/login?authorization_id=${encodeURIComponent(authorizationId)}`);
+
+  // Do not sign out or change users inside an in-flight Supabase OAuth
+  // authorization request. Doing so can invalidate authorization_id.
+  if (user.email?.toLowerCase() !== INTERNAL_RELAYDESK_EMAIL) {
+    return (
+      <main style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 24 }}>
+        <section className="auth-card" style={{ maxWidth: 560 }}>
+          <div className="eyebrow">RelayDesk</div>
+          <h1>Wrong RelayDesk account</h1>
+          <p className="muted auth-intro">RelayDesk is configured for {INTERNAL_RELAYDESK_EMAIL}.</p>
+          <a className="primary-button auth-submit" href="/oauth/logout">Reset RelayDesk sign-in</a>
+          <p className="muted" style={{ marginTop: 16 }}>After resetting, restart “Sign in with RelayDesk” from ChatGPT so it creates a fresh authorization request.</p>
+        </section>
+      </main>
+    );
   }
 
   const { data: details, error } = await supabase.auth.oauth.getAuthorizationDetails(authorizationId);
