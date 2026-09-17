@@ -4,6 +4,12 @@ import { useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 
+function safeNext() {
+  if (typeof window === "undefined") return "/dashboard";
+  const value = new URLSearchParams(window.location.search).get("next") || "/dashboard";
+  return value.startsWith("/") && !value.startsWith("//") ? value : "/dashboard";
+}
+
 export default function AccountLogin() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -14,9 +20,10 @@ export default function AccountLogin() {
   async function withGoogle() {
     setBusy(true); setMessage("");
     const supabase = createClient();
+    const next = safeNext();
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: { redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}` },
     });
     if (error) { setMessage("Google sign-in could not start."); setBusy(false); }
   }
@@ -24,18 +31,19 @@ export default function AccountLogin() {
   async function submit(event: React.FormEvent) {
     event.preventDefault(); setBusy(true); setMessage("");
     const supabase = createClient();
+    const next = safeNext();
     if (mode === "signin") {
       const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
       if (error) { setMessage("Invalid email or password."); setBusy(false); return; }
-      window.location.assign("/dashboard");
+      window.location.assign(next);
       return;
     }
     const { data, error } = await supabase.auth.signUp({
       email: email.trim(), password,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+      options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}` },
     });
     if (error) { setMessage(error.message); setBusy(false); return; }
-    if (data.session) window.location.assign("/dashboard");
+    if (data.session) window.location.assign(next);
     else { setMessage("Account created. Check your email if confirmation is required."); setBusy(false); }
   }
 
