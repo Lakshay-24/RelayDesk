@@ -15,10 +15,11 @@ test.describe("human-like product flows",()=>{
     await expect(page.getByRole("button",{name:"Continue with Google"})).toBeVisible();
   });
 
-  test("pairing without a code fails safely and sends the user to a useful path",async({page})=>{
-    await page.goto("/pair");
+  test("pairing without authentication preserves the intended destination",async({page})=>{
+    await page.goto("/pair?code=ABCD-EFGH");
+    await expect(page).toHaveURL(/\/auth\/login\?next=/);
+    expect(decodeURIComponent(new URL(page.url()).searchParams.get("next")??"")).toBe("/pair?code=ABCD-EFGH");
     await expect(page.locator("body")).not.toContainText(/undefined|null/i);
-    await expect(page.getByRole("link",{name:/sign in|dashboard|home/i}).first()).toBeVisible();
   });
 
   test("large device lists stay usable under realistic browser load",async({page})=>{
@@ -27,7 +28,6 @@ test.describe("human-like product flows",()=>{
     await expect(page.getByRole("heading",{name:"Device stress fixture"})).toBeVisible();
     await expect(page.locator(".device-row")).toHaveCount(500);
     expect(Date.now()-started).toBeLessThan(10_000);
-
     const target=page.getByText("Fixture device 487");
     await target.scrollIntoViewIfNeeded();
     await expect(target).toBeVisible();
@@ -40,7 +40,6 @@ test.describe("human-like product flows",()=>{
     await expect(trigger).toBeVisible();
     await trigger.click();
     await expect(page.getByRole("region",{name:"Send feedback"})).toBeVisible();
-
     await page.getByLabel("Feedback type").selectOption("feature");
     await page.getByLabel("Feedback message").fill("A keyboard shortcut for reconnect diagnostics would be useful.");
     await think();
