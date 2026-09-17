@@ -11,6 +11,7 @@ jobs:
     env:
       NEXT_PUBLIC_SUPABASE_URL: https://atuvyeoctkevglimkmka.supabase.co
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-key
+      RELAYDESK_E2E_FIXTURES: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
