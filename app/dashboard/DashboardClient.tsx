@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import FeedbackWidget, { type FeedbackPayload } from "./FeedbackWidget";
 
 type Device = { id:string; name:string; platform:string|null; status:string; last_seen_at:string|null; created_at:string };
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -15,12 +16,13 @@ export default function DashboardClient({ email, initialDevices, initialUsage }:
   const [rotationToken,setRotationToken]=useState<string|null>(null);
   const usagePct = useMemo(()=>Math.min(100,Math.round((usage/10000)*100)),[usage]);
 
-  async function token() {
+  async function session() {
     const supabase=createClient();
     const {data}=await supabase.auth.getSession();
     if(!data.session) throw new Error("Session expired");
-    return data.session.access_token;
+    return {supabase,session:data.session};
   }
+  async function token() { return (await session()).session.access_token; }
   async function refresh(){
     const supabase=createClient();
     const {data}=await supabase.from("devices").select("id,name,platform,status,last_seen_at,created_at").order("created_at",{ascending:true});
@@ -49,6 +51,11 @@ export default function DashboardClient({ email, initialDevices, initialUsage }:
     setBusy(true);setMessage("");
     try{for(const d of devices){const access=await token();await fetch(`${SUPABASE_URL}/functions/v1/device-manage`,{method:"POST",headers:{authorization:`Bearer ${access}`,"content-type":"application/json"},body:JSON.stringify({device_id:d.id,action:"revoke"})});}await refresh()}catch{setMessage("Could not revoke every device.")}finally{setBusy(false)}
   }
+  async function submitFeedback(payload:FeedbackPayload){
+    const {supabase,session:s}=await session();
+    const {error}=await supabase.from("user_feedback").insert({owner_id:s.user.id,kind:payload.kind,message:payload.message,page:window.location.pathname,client:navigator.userAgent.slice(0,500),metadata:{viewport:`${window.innerWidth}x${window.innerHeight}`}});
+    if(error)throw new Error("Could not send feedback. Please try again.");
+  }
   async function signOut(){const s=createClient();await s.auth.signOut();window.location.assign("/")}
 
   return <main className="app-shell">
@@ -66,5 +73,6 @@ export default function DashboardClient({ email, initialDevices, initialUsage }:
       <section className="panel" id="connections"><h2>Where you use it</h2><div className="connection-grid"><div><strong>ChatGPT</strong><p className="small">Connect RelayDesk with your RelayDesk account; your OpenAI account may be different.</p></div><div><strong>Claude & any remote MCP client</strong><p className="small">Use https://relay-desk-mjq6.vercel.app/mcp with OAuth. The client and paired device do not need to be on the same machine.</p></div></div></section>
       <section className="panel" id="settings"><h2>Settings</h2><p className="small">Device credentials survive restarts and normal network drops. Re-pair only after an explicit revoke or credential loss.</p><div className="links"><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link><Link href="/support">Support</Link></div></section>
     </section>
+    <FeedbackWidget onSubmit={submitFeedback}/>
   </main>;
 }
