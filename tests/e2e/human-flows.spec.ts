@@ -36,29 +36,32 @@ test.describe("human-like product flows",()=>{
 
   test("feedback stays small, sends successfully and recovers from an error",async({page})=>{
     await page.goto("/e2e-fixture");
-    const trigger=page.getByRole("button",{name:"Feedback"});
+    const trigger=page.getByRole("button",{name:"Feedback",exact:true});
+    const panel=page.getByRole("region",{name:"Send feedback"});
     await expect(trigger).toBeVisible();
     await trigger.click();
-    await expect(page.getByRole("region",{name:"Send feedback"})).toBeVisible();
+    await expect(panel).toBeVisible();
     await page.getByLabel("Feedback type").selectOption("feature");
     await page.getByLabel("Feedback message").fill("A keyboard shortcut for reconnect diagnostics would be useful.");
     await think();
-    await page.getByRole("button",{name:"Send"}).click();
+    await page.getByRole("button",{name:"Send",exact:true}).click();
     await expect(page.getByText("Thanks — sent.")).toBeVisible();
+    await expect(panel).toBeHidden({timeout:3000});
 
     await trigger.click();
+    await expect(panel).toBeVisible();
     await page.getByLabel("Feedback type").selectOption("bug");
     await page.getByLabel("Feedback message").fill("force-error");
-    await page.getByRole("button",{name:"Send"}).click();
+    await page.getByRole("button",{name:"Send",exact:true}).click();
     await expect(page.getByText("Synthetic feedback failure")).toBeVisible();
     await page.getByLabel("Feedback message").fill("Recovered after retry without losing the panel.");
-    await page.getByRole("button",{name:"Send"}).click();
+    await page.getByRole("button",{name:"Send",exact:true}).click();
     await expect(page.getByText("Thanks — sent.")).toBeVisible();
   });
 
   test("feedback input enforces the production message bound",async({page})=>{
     await page.goto("/e2e-fixture");
-    await page.getByRole("button",{name:"Feedback"}).click();
+    await page.getByRole("button",{name:"Feedback",exact:true}).click();
     const box=page.getByLabel("Feedback message");
     await box.fill("x".repeat(5200));
     expect((await box.inputValue()).length).toBe(5000);
