@@ -2,7 +2,7 @@
   "name":"relaydesk-mcp-facade",
   "version":"1.0.0",
   "private":true,
-  "scripts":{"dev":"next dev","build":"next build","start":"next start","typecheck":"tsc --noEmit","verify":"npm run typecheck && npm run build","smoke":"node scripts/smoke.mjs"},
+  "scripts":{"dev":"next dev","build":"next build","start":"next start","typecheck":"tsc --noEmit","verify":"npm run typecheck && npm run build","smoke":"node scripts/smoke.mjs","e2e":"playwright test"},
   "dependencies":{"@supabase/ssr":"^0.6.1","@supabase/supabase-js":"^2.49.4","next":"^15.1.6","react":"^19.0.0","react-dom":"^19.0.0"},
-  "devDependencies":{"@types/node":"^22.10.5","@types/react":"^19.0.3","@types/react-dom":"^19.0.2","typescript":"^5.7.2"}
+  "devDependencies":{"@playwright/test":"^1.55.0","@types/node":"^22.10.5","@types/react":"^19.0.3","@types/react-dom":"^19.0.2","typescript":"^5.7.2"}
 }
