@@ -3,11 +3,33 @@ import { test, expect } from "@playwright/test";
 test("landing and support surfaces are available", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Your computer, callable from ChatGPT." })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Get started" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Setup & support" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Pricing" })).toBeVisible();
   await page.goto("/support");
   await expect(page.getByRole("heading", { name: "Setup and support" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Privacy" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Terms" })).toBeVisible();
+});
+
+test("normal account sign-in surface is available", async ({ page }) => {
+  await page.goto("/auth/login");
+  await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Continue with Google" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "New to RelayDesk? Create an account" })).toBeVisible();
+});
+
+test("dashboard requires authentication", async ({ page }) => {
+  await page.goto("/dashboard");
+  await expect(page).toHaveURL(/\/auth\/login/);
+});
+
+test("pricing is explicit about live and planned tiers", async ({ page }) => {
+  await page.goto("/pricing");
+  await expect(page.getByRole("heading", { name: "Start free. Pay only when you use it heavily." })).toBeVisible();
+  await expect(page.getByText("10,000 remote tool calls per month.")).toBeVisible();
+  await expect(page.getByText("Pro — planned")).toBeVisible();
+  await expect(page.getByText(/Billing is not live yet/)).toBeVisible();
 });
 
 test("legal and health endpoints are reachable", async ({ request }) => {
