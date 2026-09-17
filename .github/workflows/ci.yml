@@ -21,3 +21,9 @@ jobs:
         run: npm run typecheck
       - name: Build
         run: npm run build
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Production smoke
+        run: npm run smoke
+      - name: Production browser E2E
+        run: npm run e2e
