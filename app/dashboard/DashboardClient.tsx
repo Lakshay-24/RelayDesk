@@ -25,9 +25,10 @@ export default function DashboardClient({ email, initialDevices, initialUsage }:
     const supabase=createClient();
     const {data}=await supabase.from("devices").select("id,name,platform,status,last_seen_at,created_at").order("created_at",{ascending:true});
     setDevices((data??[]) as Device[]);
-    const start=new Date();start.setUTCDate(1);start.setUTCHours(0,0,0,0);
-    const count=await supabase.from("commands").select("id",{count:"exact",head:true}).gte("created_at",start.toISOString());
-    setUsage(count.count??0);
+    const now=new Date();
+    const monthStart=`${now.getUTCFullYear()}-${String(now.getUTCMonth()+1).padStart(2,"0")}-01`;
+    const {data:usageRow}=await supabase.from("usage_monthly").select("tool_calls").eq("month_start",monthStart).maybeSingle();
+    setUsage(Number(usageRow?.tool_calls??0));
   }
   function addDevice(){window.location.assign("/pair")}
   async function manage(deviceId:string,action:"revoke"|"delete"|"rotate"|"rename"){
@@ -61,7 +62,7 @@ export default function DashboardClient({ email, initialDevices, initialUsage }:
       {message&&<p className="notice">{message}</p>}
       {rotationToken&&<section className="pair-card"><h2>Replacement credential</h2><p>This advanced rotation secret is shown once. Update the affected agent before revoking its old local secret.</p><code>{rotationToken}</code><div className="actions"><button className="button" onClick={()=>navigator.clipboard.writeText(rotationToken)}>Copy</button><button className="text-button" onClick={()=>setRotationToken(null)}>Dismiss</button></div></section>}
       <section className="panel" id="devices"><div className="panel-title"><h2>Your devices</h2><button className="danger-link" disabled={busy||!devices.length} onClick={revokeAll}>Revoke all</button></div>{devices.length===0?<div className="empty"><p>No devices paired yet.</p><Link className="button" href="/pair">Pair your first device</Link></div>:devices.map(d=><article className="device-row" key={d.id}><div><div className="device-name"><span className={`status-dot ${d.status}`}/>{d.name}</div><div className="device-meta">{d.platform??"Platform pending"} · {d.last_seen_at?`Last seen ${new Date(d.last_seen_at).toLocaleString()}`:"Never connected"}</div></div><div className="device-actions"><span className={`status-pill ${d.status}`}>{d.status}</span><button onClick={()=>manage(d.id,"rename")}>Rename</button><button onClick={()=>manage(d.id,"rotate")}>Rotate</button><button className="danger-link" onClick={()=>manage(d.id,"revoke")}>Revoke</button><button className="danger-link" onClick={()=>manage(d.id,"delete")}>Delete</button></div></article>)}</section>
-      <section className="panel" id="usage"><div className="panel-title"><div><h2>Usage</h2><p className="small">Free plan target · 10,000 remote tool calls/month</p></div><strong>{usage.toLocaleString()} recent calls</strong></div><div className="meter"><span style={{width:`${usagePct}%`}}/></div><p className="small">This preview currently reflects retained command history. Monthly billing enforcement stays disabled until the durable usage counter is deployed.</p></section>
+      <section className="panel" id="usage"><div className="panel-title"><div><h2>Usage</h2><p className="small">Free plan · 10,000 remote tool calls/month</p></div><strong>{usage.toLocaleString()} / 10,000</strong></div><div className="meter"><span style={{width:`${usagePct}%`}}/></div><p className="small">Monthly usage is counted independently from short-lived command history, so cleanup does not reset the meter.</p></section>
       <section className="panel" id="connections"><h2>Where you use it</h2><div className="connection-grid"><div><strong>ChatGPT</strong><p className="small">Connect RelayDesk with your RelayDesk account; your OpenAI account may be different.</p></div><div><strong>Claude & any remote MCP client</strong><p className="small">Use https://relay-desk-mjq6.vercel.app/mcp with OAuth. The client and paired device do not need to be on the same machine.</p></div></div></section>
       <section className="panel" id="settings"><h2>Settings</h2><p className="small">Device credentials survive restarts and normal network drops. Re-pair only after an explicit revoke or credential loss.</p><div className="links"><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link><Link href="/support">Support</Link></div></section>
     </section>
