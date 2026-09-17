@@ -56,11 +56,25 @@ test.describe("human-like product flows",()=>{
     await expect(page.getByText("Thanks — sent.")).toBeVisible();
   });
 
+  test("feedback input enforces the production message bound",async({page})=>{
+    await page.goto("/e2e-fixture");
+    await page.getByRole("button",{name:"Feedback"}).click();
+    const box=page.getByLabel("Feedback message");
+    await box.fill("x".repeat(5200));
+    expect((await box.inputValue()).length).toBe(5000);
+  });
+
   test("repeated navigation does not leak duplicate controls or break layout",async({page})=>{
     for(let i=0;i<12;i++){
       await page.goto(i%2===0?"/":"/pricing");
       await expect(page.locator("body")).toBeVisible();
       await expect(page.locator("body")).not.toContainText(/Application error|Internal Server Error/i);
     }
+  });
+
+  test("local production server survives a burst of concurrent safe requests",async({request})=>{
+    const paths=["/","/pricing","/support","/health.txt"];
+    const responses=await Promise.all(Array.from({length:120},(_,i)=>request.get(`${paths[i%paths.length]}?stress=${i}`)));
+    expect(responses.filter(r=>!r.ok())).toHaveLength(0);
   });
 });
