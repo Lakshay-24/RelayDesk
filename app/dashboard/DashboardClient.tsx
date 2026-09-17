@@ -52,9 +52,13 @@ export default function DashboardClient({ email, initialDevices, initialUsage }:
     try{for(const d of devices){const access=await token();await fetch(`${SUPABASE_URL}/functions/v1/device-manage`,{method:"POST",headers:{authorization:`Bearer ${access}`,"content-type":"application/json"},body:JSON.stringify({device_id:d.id,action:"revoke"})});}await refresh()}catch{setMessage("Could not revoke every device.")}finally{setBusy(false)}
   }
   async function submitFeedback(payload:FeedbackPayload){
-    const {supabase,session:s}=await session();
-    const {error}=await supabase.from("user_feedback").insert({owner_id:s.user.id,kind:payload.kind,message:payload.message,page:window.location.pathname,client:navigator.userAgent.slice(0,500),metadata:{viewport:`${window.innerWidth}x${window.innerHeight}`}});
-    if(error)throw new Error("Could not send feedback. Please try again.");
+    const access=await token();
+    const response=await fetch(`${SUPABASE_URL}/functions/v1/feedback-submit`,{
+      method:"POST",
+      headers:{authorization:`Bearer ${access}`,"content-type":"application/json"},
+      body:JSON.stringify({kind:payload.kind,message:payload.message,page:window.location.pathname,client:navigator.userAgent.slice(0,500),metadata:{viewport:`${window.innerWidth}x${window.innerHeight}`}})
+    });
+    if(!response.ok)throw new Error("Could not send feedback. Please try again.");
   }
   async function signOut(){const s=createClient();await s.auth.signOut();window.location.assign("/")}
 
