@@ -20,5 +20,8 @@ export default defineConfig({
     reuseExistingServer: false,
     timeout: 60_000,
   } : undefined,
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    { name: "desktop-chromium", use: { ...devices["Desktop Chrome"] } },
+    { name: "mobile-chromium", use: { ...devices["Pixel 7"] } },
+  ],
 });
