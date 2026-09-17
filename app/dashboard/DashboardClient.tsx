@@ -12,7 +12,7 @@ export default function DashboardClient({ email, initialDevices, initialUsage }:
   const [usage,setUsage]=useState(initialUsage);
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState("");
-  const [pairing,setPairing]=useState<{token:string;deviceId:string}|null>(null);
+  const [rotationToken,setRotationToken]=useState<string|null>(null);
   const usagePct = useMemo(()=>Math.min(100,Math.round((usage/10000)*100)),[usage]);
 
   async function token() {
@@ -29,29 +29,17 @@ export default function DashboardClient({ email, initialDevices, initialUsage }:
     const count=await supabase.from("commands").select("id",{count:"exact",head:true}).gte("created_at",start.toISOString());
     setUsage(count.count??0);
   }
-  async function addDevice(){
-    const name=window.prompt("Device name",`My computer ${devices.length+1}`)?.trim();
-    if(!name)return;
-    setBusy(true);setMessage("");
-    try{
-      const access=await token();
-      const response=await fetch(`${SUPABASE_URL}/functions/v1/device-pair`,{method:"POST",headers:{authorization:`Bearer ${access}`,"content-type":"application/json"},body:JSON.stringify({name})});
-      const body=await response.json();
-      if(!response.ok)throw new Error(body.error??"Pairing failed");
-      setPairing({token:body.device_token,deviceId:body.device_id});
-      await refresh();
-    }catch(e){setMessage(e instanceof Error?e.message:"Pairing failed")}finally{setBusy(false)}
-  }
+  function addDevice(){window.location.assign("/pair")}
   async function manage(deviceId:string,action:"revoke"|"delete"|"rotate"|"rename"){
     let name: string|undefined;
     if(action==="rename"){name=window.prompt("New device name")?.trim();if(!name)return;}
     if((action==="revoke"||action==="delete")&&!window.confirm(`${action==="delete"?"Delete":"Revoke"} this device?`))return;
-    setBusy(true);setMessage("");
+    setBusy(true);setMessage("");setRotationToken(null);
     try{
       const access=await token();
       const response=await fetch(`${SUPABASE_URL}/functions/v1/device-manage`,{method:"POST",headers:{authorization:`Bearer ${access}`,"content-type":"application/json"},body:JSON.stringify({device_id:deviceId,action,name})});
       const body=await response.json();if(!response.ok)throw new Error(body.error??"Device update failed");
-      if(action==="rotate")setPairing({token:body.device_token,deviceId});
+      if(action==="rotate")setRotationToken(body.device_token);
       await refresh();
     }catch(e){setMessage(e instanceof Error?e.message:"Device update failed")}finally{setBusy(false)}
   }
@@ -69,13 +57,13 @@ export default function DashboardClient({ email, initialDevices, initialUsage }:
       <div className="sidebar-bottom"><div className="account-email">{email}</div><button className="text-button left" onClick={signOut}>Sign out</button></div>
     </aside>
     <section className="dashboard-content">
-      <header className="dashboard-header"><div><p className="eyebrow">Remote MCP</p><h1>Devices</h1><p className="muted">Computers your AI clients can reach through RelayDesk.</p></div><button className="button primary" onClick={addDevice} disabled={busy}>+ Add device</button></header>
+      <header className="dashboard-header"><div><p className="eyebrow">Remote MCP</p><h1>Devices</h1><p className="muted">Computers and servers your AI clients can reach through RelayDesk.</p></div><button className="button primary" onClick={addDevice}>+ Add device</button></header>
       {message&&<p className="notice">{message}</p>}
-      {pairing&&<section className="pair-card"><h2>Device credential created</h2><p>Save this once. RelayDesk stores only its hash.</p><code>{pairing.token}</code><p className="small">Use it as <strong>RCO_DEVICE_TOKEN</strong> with SUPABASE_URL={SUPABASE_URL}. A one-command installer/device-code flow is the next onboarding hardening step.</p><button className="button" onClick={()=>navigator.clipboard.writeText(pairing.token)}>Copy token</button><button className="text-button" onClick={()=>setPairing(null)}>Dismiss</button></section>}
-      <section className="panel" id="devices"><div className="panel-title"><h2>Your devices</h2><button className="danger-link" disabled={busy||!devices.length} onClick={revokeAll}>Revoke all</button></div>{devices.length===0?<p className="empty">No devices paired yet.</p>:devices.map(d=><article className="device-row" key={d.id}><div><div className="device-name"><span className={`status-dot ${d.status}`}/>{d.name}</div><div className="device-meta">{d.platform??"Platform pending"} · {d.last_seen_at?`Last seen ${new Date(d.last_seen_at).toLocaleString()}`:"Never connected"}</div></div><div className="device-actions"><span className={`status-pill ${d.status}`}>{d.status}</span><button onClick={()=>manage(d.id,"rename")}>Rename</button><button onClick={()=>manage(d.id,"rotate")}>Rotate</button><button className="danger-link" onClick={()=>manage(d.id,"revoke")}>Revoke</button><button className="danger-link" onClick={()=>manage(d.id,"delete")}>Delete</button></div></article>)}</section>
-      <section className="panel" id="usage"><div className="panel-title"><div><h2>Usage</h2><p className="small">Free plan · 10,000 remote tool calls/month</p></div><strong>{usage.toLocaleString()} / 10,000</strong></div><div className="meter"><span style={{width:`${usagePct}%`}}/></div><p className="small">Usage is counted from RelayDesk command dispatches for the current calendar month.</p></section>
-      <section className="panel" id="connections"><h2>Where you use it</h2><div className="connection-grid"><div><strong>ChatGPT</strong><p className="small">Published plugin / remote MCP</p></div><div><strong>Claude & MCP clients</strong><p className="small">Use the same RelayDesk MCP endpoint.</p></div></div></section>
-      <section className="panel" id="settings"><h2>Settings</h2><p className="small">Manage device credentials here. Account data deletion remains available through the protected RelayDesk account endpoint.</p><div className="links"><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link><Link href="/support">Support</Link></div></section>
+      {rotationToken&&<section className="pair-card"><h2>Replacement credential</h2><p>This advanced rotation secret is shown once. Update the affected agent before revoking its old local secret.</p><code>{rotationToken}</code><div className="actions"><button className="button" onClick={()=>navigator.clipboard.writeText(rotationToken)}>Copy</button><button className="text-button" onClick={()=>setRotationToken(null)}>Dismiss</button></div></section>}
+      <section className="panel" id="devices"><div className="panel-title"><h2>Your devices</h2><button className="danger-link" disabled={busy||!devices.length} onClick={revokeAll}>Revoke all</button></div>{devices.length===0?<div className="empty"><p>No devices paired yet.</p><Link className="button" href="/pair">Pair your first device</Link></div>:devices.map(d=><article className="device-row" key={d.id}><div><div className="device-name"><span className={`status-dot ${d.status}`}/>{d.name}</div><div className="device-meta">{d.platform??"Platform pending"} · {d.last_seen_at?`Last seen ${new Date(d.last_seen_at).toLocaleString()}`:"Never connected"}</div></div><div className="device-actions"><span className={`status-pill ${d.status}`}>{d.status}</span><button onClick={()=>manage(d.id,"rename")}>Rename</button><button onClick={()=>manage(d.id,"rotate")}>Rotate</button><button className="danger-link" onClick={()=>manage(d.id,"revoke")}>Revoke</button><button className="danger-link" onClick={()=>manage(d.id,"delete")}>Delete</button></div></article>)}</section>
+      <section className="panel" id="usage"><div className="panel-title"><div><h2>Usage</h2><p className="small">Free plan target · 10,000 remote tool calls/month</p></div><strong>{usage.toLocaleString()} recent calls</strong></div><div className="meter"><span style={{width:`${usagePct}%`}}/></div><p className="small">This preview currently reflects retained command history. Monthly billing enforcement stays disabled until the durable usage counter is deployed.</p></section>
+      <section className="panel" id="connections"><h2>Where you use it</h2><div className="connection-grid"><div><strong>ChatGPT</strong><p className="small">Connect RelayDesk with your RelayDesk account; your OpenAI account may be different.</p></div><div><strong>Claude & any remote MCP client</strong><p className="small">Use https://relay-desk-mjq6.vercel.app/mcp with OAuth. The client and paired device do not need to be on the same machine.</p></div></div></section>
+      <section className="panel" id="settings"><h2>Settings</h2><p className="small">Device credentials survive restarts and normal network drops. Re-pair only after an explicit revoke or credential loss.</p><div className="links"><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link><Link href="/support">Support</Link></div></section>
     </section>
   </main>;
 }
