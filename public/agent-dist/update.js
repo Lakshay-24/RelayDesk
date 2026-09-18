@@ -11,7 +11,7 @@ const defaultBase = "https://relay-desk-mjq6.vercel.app/agent-dist";
 const allowed = new Set(["config.js","credentials.js","index.js","pair.js","service.js","update.js","package.json"]);
 const hash = (b) => crypto.createHash("sha256").update(b).digest("hex");
 function target(name) { return name === "package.json" ? path.join(agentRoot, name) : path.join(here, name); }
-function npmPath() { return path.join(path.dirname(process.execPath), process.platform === "win32" ? "npm.cmd" : "npm"); }
+function npmCliPath() { return path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js"); }
 async function remoteManifest(base) {
   const r = await fetch(`${base}/manifest.json`, { cache: "no-store", signal: AbortSignal.timeout(15000) });
   if (!r.ok) throw new Error(`manifest HTTP ${r.status}`);
@@ -64,8 +64,9 @@ export async function maybeSelfUpdate(env = process.env) {
       fs.renameSync(`${dest}.new`,dest);
     }
     if (installDependencies) {
-      const npm = npmPath();
-      const install = spawnSync(npm,["install","--omit=dev","--no-audit","--no-fund"],{cwd:agentRoot,stdio:"inherit",shell:process.platform==="win32"});
+      const npmCli = npmCliPath();
+      if (!fs.existsSync(npmCli)) throw new Error(`npm CLI not found beside RelayDesk Node runtime: ${npmCli}`);
+      const install = spawnSync(process.execPath,[npmCli,"install","--omit=dev","--no-audit","--no-fund"],{cwd:agentRoot,stdio:"inherit"});
       if (install.status !== 0) throw new Error(`dependency install failed with exit ${install.status}`);
     }
     fs.writeFileSync(path.join(here,"manifest.json"),JSON.stringify(manifest,null,2)+"\n",{mode:0o600});
