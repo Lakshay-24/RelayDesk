@@ -78,6 +78,13 @@ async function execute(command) {
             process.exit(0);
         }
         const result = await desktop.callTool({ name: command.tool_name, arguments: command.arguments ?? {} });
+        if (result?.isError) {
+            const message = Array.isArray(result.content)
+                ? result.content.map((item) => typeof item?.text === "string" ? item.text : "").filter(Boolean).join("\n")
+                : "";
+            await complete(command.id, undefined, message || "Remote tool reported an error.");
+            return;
+        }
         await complete(command.id, result);
     } catch (error) {
         if (error instanceof DeviceAuthError) throw error;
