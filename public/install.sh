@@ -83,7 +83,7 @@ export PATH="$NODE_DIR/bin:$PATH"
 
 step "Downloading the current RelayDesk agent"
 curl -fsSL "$BASE_URL/package.json" -o "$AGENT_ROOT/package.json"
-for file in config.js credentials.js index.js pair.js service.js; do
+for file in config.js credentials.js index.js pair.js service.js update.js manifest.json; do
   curl -fsSL "$BASE_URL/$file" -o "$DIST_DIR/$file"
 done
 

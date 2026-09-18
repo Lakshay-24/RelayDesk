@@ -64,7 +64,7 @@ if (!(Test-Path $NodeExe) -or !(Test-Path $NpmCmd)) {
 
 Write-Step "Downloading the current RelayDesk agent"
 Download-File "$BaseUrl/package.json" (Join-Path $AgentRoot "package.json")
-foreach ($file in @("config.js","credentials.js","index.js","pair.js","service.js")) {
+foreach ($file in @("config.js","credentials.js","index.js","pair.js","service.js","update.js","manifest.json")) {
   Download-File "$BaseUrl/$file" (Join-Path $DistDir $file)
 }
 
