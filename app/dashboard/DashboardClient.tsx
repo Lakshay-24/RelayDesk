@@ -24,9 +24,9 @@ export default function DashboardClient({ email, initialDevices, initialUsage, i
   const usagePct = useMemo(()=>proActive?0:Math.min(100,Math.round((usage/FREE_MONTHLY_TOOL_CALLS)*100)),[usage,proActive]);
 
   useEffect(()=>{
-    const id=window.setInterval(()=>{ void refresh(); },20000);
+    const id=window.setInterval(()=>{ void refreshPresence(); },20000);
     return ()=>window.clearInterval(id);
-  // refresh uses the current Supabase session and only updates dashboard state.
+  // Presence polling intentionally excludes billing/usage queries.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
 
@@ -37,6 +37,16 @@ export default function DashboardClient({ email, initialDevices, initialUsage, i
     return {supabase,session:data.session};
   }
   async function token() { return (await session()).session.access_token; }
+  async function refreshPresence(){
+    const supabase=createClient();
+    const [{data:deviceRows},{data:reliabilityRows}]=await Promise.all([
+      supabase.from("devices").select("id,name,hostname,platform,status,last_seen_at,created_at,agent_version").order("created_at",{ascending:true}),
+      supabase.rpc("get_relaydesk_reliability",{window_hours:24}),
+    ]);
+    setDevices((deviceRows??[]) as Device[]);
+    setReliability((reliabilityRows?.[0]??null) as Reliability|null);
+  }
+
   async function refresh(){
     const supabase=createClient();
     const {data}=await supabase.from("devices").select("id,name,hostname,platform,status,last_seen_at,created_at,agent_version").order("created_at",{ascending:true});
