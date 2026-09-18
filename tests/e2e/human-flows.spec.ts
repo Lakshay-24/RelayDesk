@@ -5,10 +5,10 @@ const think = (min=20,max=80) => new Promise(resolve=>setTimeout(resolve,min+Mat
 test.describe("human-like product flows",()=>{
   test("a new visitor can understand the product, inspect pricing and reach sign in",async({page})=>{
     await page.goto("/");
-    await expect(page.getByRole("heading",{name:"Your computer, callable from ChatGPT."})).toBeVisible();
+    await expect(page.getByRole("heading",{name:"Your devices, callable from ChatGPT, Claude, and compatible AI."})).toBeVisible();
     await think();
     await page.getByRole("link",{name:"Pricing"}).click();
-    await expect(page.getByText("10,000 remote tool calls per month.")).toBeVisible();
+    await expect(page.getByText("5,000 remote tool calls per month.")).toBeVisible();
     await think();
     await page.getByRole("link",{name:/Get started|Sign in/i}).first().click().catch(async()=>page.goto("/auth/login"));
     await expect(page).toHaveURL(/\/auth\/login/);

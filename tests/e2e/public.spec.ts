@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 
 test("landing and support surfaces are available", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Your computer, callable from ChatGPT." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Your devices, callable from ChatGPT, Claude, and compatible AI." })).toBeVisible();
   await expect(page.getByRole("link", { name: "Get started" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Setup & support" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Pricing" })).toBeVisible();
@@ -27,7 +27,7 @@ test("dashboard requires authentication", async ({ page }) => {
 test("pricing is explicit about live and planned tiers", async ({ page }) => {
   await page.goto("/pricing");
   await expect(page.getByRole("heading", { name: "Start free. Pay only when you use it heavily." })).toBeVisible();
-  await expect(page.getByText("10,000 remote tool calls per month.")).toBeVisible();
+  await expect(page.getByText("5,000 remote tool calls per month.")).toBeVisible();
   await expect(page.getByText("Pro — planned")).toBeVisible();
   await expect(page.getByText(/Billing is not live yet/)).toBeVisible();
 });
@@ -43,13 +43,13 @@ test("OAuth login fails safely without an authorization request", async ({ page 
   await page.goto("/oauth/login");
   await expect(page.getByRole("heading", { name: "Sign in to authorize" })).toBeVisible();
   await page.getByRole("button", { name: "Continue with Google" }).click();
-  await expect(page.getByText("Missing authorization request. Restart connection from ChatGPT.")).toBeVisible();
+  await expect(page.getByText("Missing authorization request. Restart the connection from your AI client.")).toBeVisible();
 });
 
 test("OAuth consent rejects a missing authorization id", async ({ page }) => {
   await page.goto("/oauth/consent");
   await expect(page.getByRole("heading", { name: "Invalid authorization request" })).toBeVisible();
-  await expect(page.getByText("Missing authorization_id. Restart the connection from ChatGPT.")).toBeVisible();
+  await expect(page.getByText("Missing authorization_id. Restart the connection from your AI client.")).toBeVisible();
 });
 
 test("MCP endpoint advertises protected-resource auth", async ({ request }) => {

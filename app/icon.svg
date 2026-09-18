@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">RelayDesk</title>
+  <rect width="64" height="64" rx="16" fill="#f5f7fa"/>
+  <path d="M18 46V18h16.2c8.5 0 13.8 4.1 13.8 11 0 4.8-2.7 8.3-7.5 9.9L49 46H38.4l-6.9-6.2h-4.1V46H18Zm9.4-13.6h6.1c3.4 0 5.2-1.2 5.2-3.5 0-2.4-1.8-3.6-5.2-3.6h-6.1v7.1Z" fill="#0b0d10"/>
+</svg>
