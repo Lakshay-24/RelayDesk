@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import FeedbackWidget, { type FeedbackPayload } from "./FeedbackWidget";
 import ConnectionGuide from "./ConnectionGuide";
 
-type Device = { id:string; name:string; platform:string|null; status:string; last_seen_at:string|null; created_at:string };
+type Device = { id:string; name:string; hostname:string|null; platform:string|null; status:string; last_seen_at:string|null; created_at:string; agent_version:string|null };
 type Reliability = { total_devices:number; online_devices:number; total_calls:number; done_calls:number; error_calls:number; inflight_calls:number; success_pct:number|null; p50_ms:number|null; p95_ms:number|null };
 type Billing = { plan:string; status:string; currency:string|null; amount_minor:number|null; current_period_end:string|null; cancel_at_period_end:boolean };
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -23,6 +23,13 @@ export default function DashboardClient({ email, initialDevices, initialUsage, i
   const proActive=billing?.plan==="pro"&&billing?.status==="active";
   const usagePct = useMemo(()=>proActive?0:Math.min(100,Math.round((usage/FREE_MONTHLY_TOOL_CALLS)*100)),[usage,proActive]);
 
+  useEffect(()=>{
+    const id=window.setInterval(()=>{ void refresh(); },20000);
+    return ()=>window.clearInterval(id);
+  // refresh uses the current Supabase session and only updates dashboard state.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
+
   async function session() {
     const supabase=createClient();
     const {data}=await supabase.auth.getSession();
@@ -32,7 +39,7 @@ export default function DashboardClient({ email, initialDevices, initialUsage, i
   async function token() { return (await session()).session.access_token; }
   async function refresh(){
     const supabase=createClient();
-    const {data}=await supabase.from("devices").select("id,name,platform,status,last_seen_at,created_at").order("created_at",{ascending:true});
+    const {data}=await supabase.from("devices").select("id,name,hostname,platform,status,last_seen_at,created_at,agent_version").order("created_at",{ascending:true});
     setDevices((data??[]) as Device[]);
     const now=new Date();
     const monthStart=`${now.getUTCFullYear()}-${String(now.getUTCMonth()+1).padStart(2,"0")}-01`;
@@ -97,7 +104,7 @@ export default function DashboardClient({ email, initialDevices, initialUsage, i
       <header className="dashboard-header"><div><p className="eyebrow">Remote MCP</p><h1>Devices</h1><p className="muted">Devices your AI clients can reach through RelayDesk. Current agent support covers Windows, macOS, and Linux computers and servers.</p></div><button className="button primary" onClick={addDevice}>+ Add device</button></header>
       {message&&<p className="notice">{message}</p>}
       {rotationToken&&<section className="pair-card"><h2>Replacement credential</h2><p>This advanced rotation secret is shown once. Update the affected agent before revoking its old local secret.</p><code>{rotationToken}</code><div className="actions"><button className="button" onClick={()=>navigator.clipboard.writeText(rotationToken)}>Copy</button><button className="text-button" onClick={()=>setRotationToken(null)}>Dismiss</button></div></section>}
-      <section className="panel" id="devices"><div className="panel-title"><h2>Your devices</h2><button className="danger-link" disabled={busy||!devices.length} onClick={revokeAll}>Revoke all</button></div>{devices.length===0?<div className="empty"><p>No devices paired yet.</p><Link className="button" href="/install">Add your first device</Link></div>:devices.map(d=><article className="device-row" key={d.id}><div><div className="device-name"><span className={`status-dot ${d.status}`}/>{d.name}</div><div className="device-meta">{d.platform??"Platform pending"} · {d.last_seen_at?`Last seen ${new Date(d.last_seen_at).toLocaleString()}`:"Never connected"}</div></div><div className="device-actions"><span className={`status-pill ${d.status}`}>{d.status}</span><button onClick={()=>manage(d.id,"rename")}>Rename</button><button onClick={()=>manage(d.id,"rotate")}>Rotate</button><button className="danger-link" onClick={()=>manage(d.id,"revoke")}>Revoke</button><button className="danger-link" onClick={()=>manage(d.id,"delete")}>Delete</button></div></article>)}</section>
+      <section className="panel" id="devices"><div className="panel-title"><h2>Your devices</h2><button className="danger-link" disabled={busy||!devices.length} onClick={revokeAll}>Revoke all</button></div>{devices.length===0?<div className="empty"><p>No devices paired yet.</p><Link className="button" href="/install">Add your first device</Link></div>:devices.map(d=><article className="device-row" key={d.id}><div><div className="device-name"><span className={`status-dot ${d.status}`}/>{d.name}</div><div className="device-meta">{d.hostname??d.platform??"Machine pending"} · {d.platform??"Platform pending"}{d.agent_version?` · Agent ${d.agent_version}`:""} · {d.last_seen_at?`Last seen ${new Date(d.last_seen_at).toLocaleString()}`:"Never connected"}</div></div><div className="device-actions"><span className={`status-pill ${d.status}`}>{d.status}</span><button onClick={()=>manage(d.id,"rename")}>Rename</button><button onClick={()=>manage(d.id,"rotate")}>Rotate</button><button className="danger-link" onClick={()=>manage(d.id,"revoke")}>Revoke</button><button className="danger-link" onClick={()=>manage(d.id,"delete")}>Delete</button></div></article>)}</section>
       <section className="panel" id="reliability"><div className="panel-title"><div><h2>Reliability · last 24h</h2><p className="small">Measured from real RelayDesk device commands, not browser pings.</p></div><button className="button" disabled={busy} onClick={refresh}>Refresh</button></div>{!reliability?<p className="small">No reliability sample yet.</p>:<div className="connection-grid"><div><strong>{reliability.online_devices} / {reliability.total_devices}</strong><p className="small">Devices online</p></div><div><strong>{reliability.total_calls}</strong><p className="small">Tool calls</p></div><div><strong>{reliability.success_pct==null?"—":`${reliability.success_pct}%`}</strong><p className="small">Completed-call success</p></div><div><strong>{reliability.p95_ms==null?"—":`${Math.round(reliability.p95_ms)} ms`}</strong><p className="small">P95 end-to-end command latency</p></div></div>}<p className="small">Done {reliability?.done_calls??0} · Errors {reliability?.error_calls??0} · In flight {reliability?.inflight_calls??0}. Treat small samples cautiously.</p></section>
       <section className="panel" id="usage"><div className="panel-title"><div><h2>Usage & billing</h2><p className="small">{proActive?"Pro plan · active":"Free plan · 5,000 remote tool calls/month"}</p></div><strong>{proActive?usage.toLocaleString():`${usage.toLocaleString()} / ${FREE_MONTHLY_TOOL_CALLS.toLocaleString()}`}</strong></div>{!proActive&&<div className="meter"><span style={{width:`${usagePct}%`}}/></div>}<p className="small">Monthly usage is counted independently from short-lived command history, so cleanup does not reset the meter.</p>{billing&&<div className="actions"><span className="small">Billing status: {billing.status}{billing.currency?` · ${billing.currency}`:""}{billing.current_period_end?` · current period ends ${new Date(billing.current_period_end).toLocaleDateString()}`:""}</span>{proActive&&!billing.cancel_at_period_end&&<button className="danger-link" disabled={busy} onClick={cancelSubscription}>Cancel at period end</button>}{billing.cancel_at_period_end&&<span className="small">Cancellation scheduled.</span>}</div>}{!proActive&&<div className="actions"><Link className="button" href="/pricing">View Pro</Link></div>}</section>
       <ConnectionGuide/>
