@@ -15,7 +15,7 @@ export default async function Dashboard() {
   const now = new Date();
   const monthStart = `${now.getUTCFullYear()}-${String(now.getUTCMonth()+1).padStart(2,"0")}-01`;
   const [{ data: devices }, { data: usage }, { data: reliabilityRows }, { data: billing }] = await Promise.all([
-    supabase.from("devices").select("id,name,platform,status,last_seen_at,created_at").order("created_at", { ascending: true }),
+    supabase.from("devices").select("id,name,hostname,platform,status,last_seen_at,created_at,agent_version").order("created_at", { ascending: true }),
     supabase.from("usage_monthly").select("tool_calls").eq("month_start", monthStart).maybeSingle(),
     supabase.rpc("get_relaydesk_reliability", { window_hours: 24 }),
     supabase.from("billing_subscriptions").select("plan,status,currency,amount_minor,current_period_end,cancel_at_period_end").maybeSingle(),
