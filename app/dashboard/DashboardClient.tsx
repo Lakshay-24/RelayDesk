@@ -58,12 +58,14 @@ export default function DashboardClient({ email, initialDevices, initialUsage, i
   async function token() { return (await session()).session.access_token; }
   async function refreshPresence(){
     const supabase=createClient();
-    const [{data:deviceRows},{data:reliabilityRows}]=await Promise.all([
+    const [{data:deviceRows},{data:reliabilityRows},{data:commandRows}]=await Promise.all([
       supabase.from("devices").select("id,name,hostname,platform,status,last_seen_at,created_at,agent_version").order("created_at",{ascending:true}),
       supabase.rpc("get_relaydesk_reliability",{window_hours:24}),
+      supabase.from("commands").select("id,device_id,tool_name,status,created_at,started_at,finished_at,error").order("created_at",{ascending:false}).limit(20),
     ]);
     setDevices((deviceRows??[]) as Device[]);
     setReliability((reliabilityRows?.[0]??null) as Reliability|null);
+    setRecentCommands((commandRows??[]) as CommandAudit[]);
   }
 
   async function refresh(){
@@ -72,14 +74,17 @@ export default function DashboardClient({ email, initialDevices, initialUsage, i
     setDevices((data??[]) as Device[]);
     const now=new Date();
     const monthStart=`${now.getUTCFullYear()}-${String(now.getUTCMonth()+1).padStart(2,"0")}-01`;
-    const [{data:usageRow},{data:reliabilityRows},{data:billingRow}]=await Promise.all([
+    const [{data:usageRow},{data:reliabilityRows},{data:billingRow},{data:commandRows}]=await Promise.all([
       supabase.from("usage_monthly").select("tool_calls").eq("month_start",monthStart).maybeSingle(),
       supabase.rpc("get_relaydesk_reliability",{window_hours:24}),
       supabase.from("billing_subscriptions").select("plan,status,currency,amount_minor,current_period_end,cancel_at_period_end").maybeSingle(),
+      supabase.from("commands").select("id,device_id,tool_name,status,created_at,started_at,finished_at,error").order("created_at",{ascending:false}).limit(20),
     ]);
     setUsage(Number(usageRow?.tool_calls??0));
     setReliability((reliabilityRows?.[0]??null) as Reliability|null);
     setBilling((billingRow??null) as Billing|null);
+    setRecentCommands((commandRows??[]) as CommandAudit[]);
+    await refreshLatestAgentVersion();
   }
   function addDevice(){window.location.assign("/install")}
   async function manage(deviceId:string,action:"revoke"|"delete"|"rotate"|"rename"){
