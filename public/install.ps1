@@ -91,9 +91,17 @@ if ($LauncherHash -ne ([string]$Manifest.launcher_sha256).ToLowerInvariant()) {
 if (Test-Path $LauncherPath) {
   $ExistingLauncherHash = (Get-FileHash -Algorithm SHA256 -Path $LauncherPath).Hash.ToLowerInvariant()
   if ($ExistingLauncherHash -ne $LauncherHash) {
-    throw "RelayDesk launcher differs from this release. Stop the existing RelayDesk service before upgrading the launcher."
+    if ($SkipService) {
+      Remove-Item $LauncherTemp -Force -ErrorAction SilentlyContinue
+      throw "RelayDesk launcher upgrade requires service management. Re-run without -SkipService."
+    }
+    Write-Step "Upgrading the stable RelayDesk launcher"
+    schtasks.exe /End /TN "RelayDesk Agent" 2>$null | Out-Null
+    Start-Sleep -Seconds 2
+    Move-Item -Force $LauncherTemp $LauncherPath
+  } else {
+    Remove-Item $LauncherTemp -Force
   }
-  Remove-Item $LauncherTemp -Force
 } else {
   Move-Item -Force $LauncherTemp $LauncherPath
 }
