@@ -74,3 +74,15 @@ test("protected-resource metadata points at production MCP", async ({ request })
   expect(body.authorization_servers).toContain("https://atuvyeoctkevglimkmka.supabase.co/auth/v1");
   expect(body.scopes_supported).toEqual(expect.arrayContaining(["openid", "email", "profile", "offline_access"]));
 });
+
+
+test("billing status endpoint is cacheable and exposes only public plan data", async ({ request }) => {
+  const response = await request.get("/api/billing/status");
+  expect(response.ok()).toBeTruthy();
+  expect(response.headers()["cache-control"]).toContain("s-maxage=60");
+  const body = await response.json();
+  expect(body.provider).toBe("razorpay");
+  expect(Array.isArray(body.plans)).toBeTruthy();
+  expect(body.plans.map((p:any)=>p.currency)).toEqual(expect.arrayContaining(["INR","USD"]));
+  expect(body.key_secret).toBeUndefined();
+});
