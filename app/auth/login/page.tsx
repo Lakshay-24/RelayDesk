@@ -16,6 +16,7 @@ export default function AccountLogin() {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [confirmationPending, setConfirmationPending] = useState(false);
 
   async function withGoogle() {
     setBusy(true); setMessage("");
@@ -29,7 +30,7 @@ export default function AccountLogin() {
   }
 
   async function submit(event: React.FormEvent) {
-    event.preventDefault(); setBusy(true); setMessage("");
+    event.preventDefault(); setBusy(true); setMessage(""); setConfirmationPending(false);
     const supabase = createClient();
     const next = safeNext();
     if (mode === "signin") {
@@ -44,7 +45,23 @@ export default function AccountLogin() {
     });
     if (error) { setMessage(error.message); setBusy(false); return; }
     if (data.session) window.location.assign(next);
-    else { setMessage("Account created. Check your email if confirmation is required."); setBusy(false); }
+    else { setMessage("Account created. Check your email to confirm your RelayDesk account."); setConfirmationPending(true); setBusy(false); }
+  }
+
+  async function resendConfirmation() {
+    if (!email.trim()) { setMessage("Enter your email first."); return; }
+    setBusy(true); setMessage("");
+    const supabase=createClient();
+    const next=safeNext();
+    const {error}=await supabase.auth.resend({
+      type:"signup",
+      email:email.trim(),
+      options:{emailRedirectTo:`${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`}
+    });
+    setBusy(false);
+    if(error){setMessage("Could not resend confirmation email. Please try again.");return;}
+    setMessage("Confirmation email sent again.");
+    setConfirmationPending(true);
   }
 
   return <main className="shell"><section className="card auth-card">
@@ -52,6 +69,7 @@ export default function AccountLogin() {
     <h1>{mode === "signin" ? "Sign in" : "Create your account"}</h1>
     <p className="lead">Connect and manage computers you own, then use them from compatible AI clients.</p>
     {message && <p className="notice">{message}</p>}
+    {confirmationPending && <button className="text-button" type="button" onClick={resendConfirmation} disabled={busy}>Resend confirmation email</button>}
     <button className="button primary wide" type="button" onClick={withGoogle} disabled={busy}>Continue with Google</button>
     <div className="divider" />
     <form className="stack" onSubmit={submit}>
