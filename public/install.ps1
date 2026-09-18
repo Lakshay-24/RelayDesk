@@ -117,7 +117,7 @@ foreach ($property in $Manifest.files.psobject.Properties) {
   $actual = (Get-FileHash -Algorithm SHA256 -Path $destination).Hash.ToLowerInvariant()
   if ($actual -ne $expected) { throw "Checksum verification failed for $file." }
 }
-Set-Content -Path (Join-Path $StageDist "manifest.json") -Value $ManifestRaw -Encoding UTF8
+$Utf8NoBom = New-Object System.Text.UTF8Encoding($false)\n[System.IO.File]::WriteAllText((Join-Path $StageDist "manifest.json"), $ManifestRaw, $Utf8NoBom)
 
 Write-Step "Installing RelayDesk runtime dependencies"
 Push-Location $StageRoot
@@ -141,7 +141,7 @@ if (Test-Path $CurrentPath) {
   try { $Previous = (Get-Content $CurrentPath -Raw | ConvertFrom-Json).version } catch {}
 }
 $CurrentTemp = "$CurrentPath.new-$PID"
-@{ version = $Version; previous = $Previous } | ConvertTo-Json | Set-Content -Path $CurrentTemp -Encoding UTF8
+$CurrentJson = @{ version = $Version; previous = $Previous } | ConvertTo-Json\n[System.IO.File]::WriteAllText($CurrentTemp, $CurrentJson + [Environment]::NewLine, $Utf8NoBom)
 Move-Item -Force $CurrentTemp $CurrentPath
 Remove-Item $ManifestTemp -Force -ErrorAction SilentlyContinue
 
