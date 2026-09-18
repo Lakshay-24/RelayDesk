@@ -1,8 +1,14 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 export function credentialsPath(env = process.env) {
-    return env.RELAYDESK_CREDENTIALS_FILE || path.join(os.homedir(), ".relaydesk", "credentials.json");
+    if (env.RELAYDESK_CREDENTIALS_FILE)
+        return env.RELAYDESK_CREDENTIALS_FILE;
+    const versionedInstallCredential = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "credentials.json");
+    if (fs.existsSync(versionedInstallCredential))
+        return versionedInstallCredential;
+    return path.join(os.homedir(), ".relaydesk", "credentials.json");
 }
 export function loadCredentials(env = process.env) {
     try {
