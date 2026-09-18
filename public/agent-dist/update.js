@@ -42,15 +42,28 @@ export async function maybeSelfUpdate(env = process.env) {
       fs.writeFileSync(file,data,{mode:0o600});
       staged.set(name,file);
     }
+    let installDependencies = false;
+    const stagedPackage = staged.get("package.json");
+    if (stagedPackage) {
+      const currentPackage = target("package.json");
+      if (!fs.existsSync(currentPackage)) installDependencies = true;
+      else {
+        try {
+          const current = JSON.parse(fs.readFileSync(currentPackage,"utf8"));
+          const next = JSON.parse(fs.readFileSync(stagedPackage,"utf8"));
+          installDependencies = JSON.stringify(current.dependencies ?? {}) !== JSON.stringify(next.dependencies ?? {});
+        } catch { installDependencies = true; }
+      }
+    }
     for (const [name,file] of staged) {
       const dest = target(name);
+      if (fs.existsSync(dest) && hash(fs.readFileSync(dest)) === hash(fs.readFileSync(file))) continue;
       const backup = `${dest}.relaydesk-backup-${process.pid}`;
       if (fs.existsSync(dest)) { fs.copyFileSync(dest,backup); backups.set(dest,backup); }
       fs.copyFileSync(file,`${dest}.new`);
       fs.renameSync(`${dest}.new`,dest);
     }
-    const packageChanged = manifest.files["package.json"] && backups.has(path.join(agentRoot,"package.json"));
-    if (packageChanged) {
+    if (installDependencies) {
       const npm = npmPath();
       const install = spawnSync(npm,["install","--omit=dev","--no-audit","--no-fund"],{cwd:agentRoot,stdio:"inherit",shell:process.platform==="win32"});
       if (install.status !== 0) throw new Error(`dependency install failed with exit ${install.status}`);
