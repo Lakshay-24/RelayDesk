@@ -11,7 +11,13 @@ const defaultBase = "https://relay-desk-mjq6.vercel.app/agent-dist";
 const allowed = new Set(["config.js","credentials.js","index.js","pair.js","service.js","update.js","package.json"]);
 const hash = (b) => crypto.createHash("sha256").update(b).digest("hex");
 function target(name) { return name === "package.json" ? path.join(agentRoot, name) : path.join(here, name); }
-function npmPath() { return path.join(path.dirname(process.execPath), process.platform === "win32" ? "npm.cmd" : "npm"); }
+function npmCliPath() { return path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js"); }
+function dependencyShape(file) {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(file, "utf8"));
+    return JSON.stringify({ dependencies: pkg.dependencies ?? {}, optionalDependencies: pkg.optionalDependencies ?? {} });
+  } catch { return ""; }
+}
 async function remoteManifest(base) {
   const r = await fetch(`${base}/manifest.json`, { cache: "no-store", signal: AbortSignal.timeout(15000) });
   if (!r.ok) throw new Error(`manifest HTTP ${r.status}`);
