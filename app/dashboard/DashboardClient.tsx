@@ -64,7 +64,7 @@ export default function DashboardClient({ email, initialDevices, initialUsage }:
 
   return <main className="app-shell">
     <aside className="sidebar">
-      <Link className="brand" href="/"><span className="brand-mark">R</span><span>RelayDesk</span></Link>
+      <Link className="brand" href="/"><img className="brand-mark" src="/relaydesk-mark.svg" alt="" width={34} height={34} /><span>RelayDesk</span></Link>
       <nav className="nav"><a className="active" href="#devices">Devices</a><a href="#usage">Usage</a><a href="#connections">Connections</a><a href="#settings">Settings</a></nav>
       <div className="sidebar-bottom"><div className="account-email">{email}</div><button className="text-button left" onClick={signOut}>Sign out</button></div>
     </aside>
