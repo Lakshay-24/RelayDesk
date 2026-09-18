@@ -1,8 +1,9 @@
+import path from "node:path";
 import { loadCredentials } from "./credentials.js";
 const DEFAULT_URL = "https://atuvyeoctkevglimkmka.supabase.co";
 export function config(env = process.env) {
     const stored = loadCredentials(env);
-    const defaultCommand = process.platform === "win32" ? "npx.cmd" : "npx";
+    const defaultCommand = path.join(path.dirname(process.execPath), process.platform === "win32" ? "npx.cmd" : "npx");
     const desktopCommand = env.RCO_DESKTOP_COMMANDER_COMMAND || defaultCommand;
     let desktopArgs = ["-y", "@wonderwhy-er/desktop-commander@latest"];
     if (env.RCO_DESKTOP_COMMANDER_ARGS_JSON) {

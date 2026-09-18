@@ -145,7 +145,13 @@ $CurrentJson = @{ version = $Version; previous = $Previous } | ConvertTo-Json\n[
 Move-Item -Force $CurrentTemp $CurrentPath
 Remove-Item $ManifestTemp -Force -ErrorAction SilentlyContinue
 
-$CredentialFile = Join-Path $HOME ".relaydesk\credentials.json"
+$StableCredentialFile = Join-Path $AgentRoot "credentials.json"
+$LegacyCredentialFile = Join-Path $HOME ".relaydesk\credentials.json"
+if (!(Test-Path $StableCredentialFile) -and (Test-Path $LegacyCredentialFile)) {
+  Copy-Item $LegacyCredentialFile $StableCredentialFile -Force
+}
+$env:RELAYDESK_CREDENTIALS_FILE = $StableCredentialFile
+$CredentialFile = $StableCredentialFile
 if (!$SkipPair) {
   if (Test-Path $CredentialFile) {
     Write-Step "Existing RelayDesk device credential found; keeping the current pairing"
