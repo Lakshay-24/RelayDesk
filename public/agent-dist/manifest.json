@@ -1,10 +1,10 @@
 {
-  "version": "0.3.2",
+  "version": "0.3.3",
   "files": {
-    "package.json": "86c45853a51f5d600b095c5bbd0edf4e68915679e8ae3e457e3ff4efd219a6fd",
+    "package.json": "869c10eddbcfd53ca880a56e6e3c4cc22612b650b7eaaa64f54cb3927026be9d",
     "config.js": "a3fd4a10aa16d3d72fad4d84558eac8e9ea505fc8da8908a79ff1b7af899a79c",
     "credentials.js": "66f1e6914cdbc77a70fe92831162bad3bad5f9199e76e7c46a93cb796001eb8c",
-    "index.js": "5fbe08e153015edbde1171bcc79b350c887e49a203f98aab386de47bdf327813",
+    "index.js": "469ccf9c2284009b9e052f5ca76b4b4717c2cae31295c48a232160185dc895d8",
     "pair.js": "5834a4046428694b9b8e79f3cb7314ac3a985446c7d2a8d835f0702bef6c2530",
     "service.js": "a89e84a29cd4d1bf4e07de6ce2d3d5a71b9ee63c0d6f1ee4e4b9b811ab075c75",
     "update.js": "586beeb1ada874e8a2c95c8d43606383ab795bbf874d13a8992c2b1d9e4980e7"

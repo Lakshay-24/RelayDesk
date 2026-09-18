@@ -36,7 +36,7 @@ if (supervised) {
 const cfg = config();
 const channelUrl = `${cfg.url}/functions/v1/device-channel`;
 const transport = new StdioClientTransport({ command: cfg.desktopCommand, args: cfg.desktopArgs });
-const desktop = new Client({ name: "relaydesk-agent", version: "0.3.2" });
+const desktop = new Client({ name: "relaydesk-agent", version: "0.3.3" });
 await desktop.connect(transport);
 const listed = await desktop.listTools();
 let shuttingDown = false;
@@ -66,7 +66,7 @@ async function post(body, timeoutMs = 15000) {
 async function hello() {
     const result = await post({
         action: "hello", hostname: os.hostname(), platform: process.platform,
-        agent_version: "0.3.2", tools: listed.tools
+        agent_version: "0.3.3", tools: listed.tools
     });
     deviceId = result.device_id;
     lastHeartbeat = Date.now();
