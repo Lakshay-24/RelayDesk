@@ -147,7 +147,14 @@ if (Test-Path $ReleaseRoot) {
 
 $Previous = $null
 if (Test-Path $CurrentPath) {
-  try { $Previous = (Get-Content $CurrentPath -Raw | ConvertFrom-Json).version } catch {}
+  try {
+    $ExistingCurrent = Get-Content $CurrentPath -Raw | ConvertFrom-Json
+    if ([string]$ExistingCurrent.version -eq $Version) {
+      $Previous = $ExistingCurrent.previous
+    } else {
+      $Previous = $ExistingCurrent.version
+    }
+  } catch {}
 }
 $CurrentTemp = "$CurrentPath.new-$PID"
 $CurrentJson = @{ version = $Version; previous = $Previous } | ConvertTo-Json

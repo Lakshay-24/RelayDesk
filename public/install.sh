@@ -137,9 +137,9 @@ fi
 
 previous=""
 if [ -f "$CURRENT" ]; then
-  previous="$("$NODE" -e "try{const x=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));process.stdout.write(String(x.version||''))}catch{}" "$CURRENT")"
+  previous="$("$NODE" -e "try{const x=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));const incoming=process.argv[2];process.stdout.write(String(x.version===incoming?(x.previous||''):(x.version||'')))}catch{}" "$CURRENT" "$version")"
 fi
-current_tmp="$CURRENT.new-$$"
+current_tmp="$CURRENT.new-$"
 "$NODE" -e "require('fs').writeFileSync(process.argv[1],JSON.stringify({version:process.argv[2],previous:process.argv[3]||null},null,2)+'\n')" "$current_tmp" "$version" "$previous"
 mv "$current_tmp" "$CURRENT"
 rm -f "$manifest_tmp"
