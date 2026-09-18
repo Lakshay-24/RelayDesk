@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "public/install.sh"
+      - "public/install.ps1"
       - "public/agent-dist/**"
       - ".github/workflows/installer-smoke.yml"
   workflow_dispatch:
@@ -44,3 +45,27 @@ jobs:
           test -f "$RELAYDESK_INSTALL_ROOT/agent/releases/$version/dist/index.js"
           test -f "$RELAYDESK_INSTALL_ROOT/agent/releases/$version/dist/manifest.json"
           test -d "$RELAYDESK_INSTALL_ROOT/agent/releases/$version/node_modules"
+
+  windows-installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Windows installer without pairing or service
+        shell: powershell
+        run: |
+          $base = "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/public/agent-dist"
+          & .\public\install.ps1 -BaseUrl $base -InstallRoot "$env:RUNNER_TEMP\relaydesk-install" -SkipPair -SkipService
+      - name: Verify Windows versioned install layout and JSON encoding
+        shell: pwsh
+        run: |
+          $root = "$env:RUNNER_TEMP\relaydesk-install"
+          if (!(Test-Path "$root\agent\launcher.js")) { throw "launcher missing" }
+          if (!(Test-Path "$root\agent\current.json")) { throw "current.json missing" }
+          $bytes = [System.IO.File]::ReadAllBytes("$root\agent\current.json")
+          if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) { throw "current.json contains UTF-8 BOM" }
+          $current = Get-Content "$root\agent\current.json" -Raw | ConvertFrom-Json
+          $version = [string]$current.version
+          if ([string]::IsNullOrWhiteSpace($version)) { throw "version missing" }
+          if (!(Test-Path "$root\agent\releases\$version\dist\index.js")) { throw "release index missing" }
+          if (!(Test-Path "$root\agent\releases\$version\dist\manifest.json")) { throw "release manifest missing" }
+          if (!(Test-Path "$root\agent\releases\$version\node_modules")) { throw "release node_modules missing" }
