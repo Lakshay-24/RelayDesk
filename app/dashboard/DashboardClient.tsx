@@ -28,11 +28,26 @@ export default function DashboardClient({ email, initialDevices, initialUsage, i
   const usagePct = useMemo(()=>proActive?0:Math.min(100,Math.round((usage/FREE_MONTHLY_TOOL_CALLS)*100)),[usage,proActive]);
 
   useEffect(()=>{
+    void refreshLatestAgentVersion();
     const id=window.setInterval(()=>{ void refreshPresence(); },20000);
     return ()=>window.clearInterval(id);
   // Presence polling intentionally excludes billing/usage queries.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
+
+  async function refreshLatestAgentVersion(){
+    try{
+      const response=await fetch("/agent-dist/manifest.json",{cache:"no-store"});
+      const manifest=await response.json();
+      setLatestAgentVersion(typeof manifest?.version==="string"?manifest.version:null);
+    }catch{setLatestAgentVersion(null)}
+  }
+
+  function commandDuration(command:CommandAudit){
+    if(!command.started_at) return null;
+    const end=command.finished_at?new Date(command.finished_at).getTime():Date.now();
+    return Math.max(0,end-new Date(command.started_at).getTime());
+  }
 
   async function session() {
     const supabase=createClient();
