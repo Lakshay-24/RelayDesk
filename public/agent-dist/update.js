@@ -52,7 +52,7 @@ export async function maybeSelfUpdate(env = process.env) {
     const packageChanged = manifest.files["package.json"] && backups.has(path.join(agentRoot,"package.json"));
     if (packageChanged) {
       const npm = npmPath();
-      const install = spawnSync(npm,["install","--omit=dev","--no-audit","--no-fund"],{cwd:agentRoot,stdio:"inherit"});
+      const install = spawnSync(npm,["install","--omit=dev","--no-audit","--no-fund"],{cwd:agentRoot,stdio:"inherit",shell:process.platform==="win32"});
       if (install.status !== 0) throw new Error(`dependency install failed with exit ${install.status}`);
     }
     fs.writeFileSync(path.join(here,"manifest.json"),JSON.stringify(manifest,null,2)+"\n",{mode:0o600});
