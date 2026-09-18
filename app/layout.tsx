@@ -69,7 +69,7 @@ const softwareJsonLd = {
     "@type": "Offer",
     price: "0",
     priceCurrency: "USD",
-    description: "Free plan with 10,000 remote tool calls per month.",
+    description: "Free plan with 5,000 remote tool calls per month.",
   },
 };
 
