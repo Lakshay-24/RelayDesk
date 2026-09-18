@@ -14,7 +14,7 @@ async function assertNoBadSurface(page: Page) {
 
 test("every public route renders cleanly", async ({ page }) => {
   for (const route of publicRoutes) {
-    const response = await page.goto(route, { waitUntil: "networkidle" });
+    const response = await page.goto(route, { waitUntil: "domcontentloaded" });
     expect(response?.ok(), route).toBeTruthy();
     await assertNoBadSurface(page);
   }
