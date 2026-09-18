@@ -1,11 +1,11 @@
 {
-  "version": "0.4.1",
+  "version": "0.4.2",
   "launcher_sha256": "7902df69302cdb548d2db713981e92bc74de7e53265ebe033580ee515f8f0efc",
   "files": {
-    "package.json": "e66e0f53002f3fd136163fa8054d8fbf31413a66bf69db32df049c912bb6f02c",
+    "package.json": "abd77becf4387e665616c4f10a5b76dfa712c392c40bd2898e36551c6027c580",
     "config.js": "63644cf9536acf70cabe4db4458ad88ac3f62ae29c15767d446be223c95467c1",
     "credentials.js": "e6572af563bfb5a3abd16eec3c61b101471bccb5f0652123338caed9bf896ede",
-    "index.js": "df132a960d50cc658b087259647716dec53c2c99273acba58cc851549be7d08c",
+    "index.js": "4e86c1f6662d4c88e524e9ba4816473cc74aa9a2884dc51333e600aa8e88f82b",
     "pair.js": "5834a4046428694b9b8e79f3cb7314ac3a985446c7d2a8d835f0702bef6c2530",
     "service.js": "0737687e7a5de7e41a86c5724c73689d2e80ae716ae999a907fcfcd6d0563c05"
   }
