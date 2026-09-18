@@ -33,7 +33,7 @@ jobs:
           const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
           if (!/^[0-9]+[.][0-9]+[.][0-9]+$/.test(String(manifest.version || ''))) throw new Error('invalid manifest version');
           const listed = Object.keys(manifest.files || {}).sort();
-          const expected = ['config.js','credentials.js','index.js','package.json','pair.js','service.js','update.js'].sort();
+          const expected = ['config.js','credentials.js','index.js','package.json','pair.js','service.js'].sort();
           if (JSON.stringify(listed) !== JSON.stringify(expected)) throw new Error('manifest file set mismatch');
           for (const name of listed) {
             const file = path.join(root, name);
@@ -41,8 +41,20 @@ jobs:
             const actual = crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
             if (actual !== manifest.files[name]) throw new Error('checksum mismatch for ' + name);
           }
-          console.log('agent manifest verified:', manifest.version);
+          const launcher = path.join(root, 'launcher.js');
+          if (!/^[a-f0-9]{64}$/.test(String(manifest.launcher_sha256 || ''))) throw new Error('invalid launcher checksum');
+          const launcherActual = crypto.createHash('sha256').update(fs.readFileSync(launcher)).digest('hex');
+          if (launcherActual !== manifest.launcher_sha256) throw new Error('launcher checksum mismatch');
+          if (fs.existsSync(path.join(root, 'update.js'))) throw new Error('obsolete in-place updater must not be published');
+          console.log('agent manifest and launcher verified:', manifest.version);
           NODE
+      - name: Agent script syntax
+        run: |
+          node --check public/agent-dist/launcher.js
+          node --check public/agent-dist/index.js
+          node --check public/agent-dist/service.js
+          node --check public/agent-dist/pair.js
+          bash -n public/install.sh
       - name: Build
         run: npm run build
       - name: Install Playwright Chromium
