@@ -3,7 +3,7 @@
 Last updated: 2026-09-18
 
 Production site: https://relay-desk-mjq6.vercel.app  
-Production MCP endpoint: https://atuvyeoctkevglimkmka.supabase.co/functions/v1/mcp
+Production MCP endpoint: https://relay-desk-mjq6.vercel.app/mcp
 
 ## What RelayDesk is
 
@@ -120,17 +120,21 @@ The server-side annotations are the source of truth; reviewer justifications sho
 ## Production review checklist
 
 Before submission:
-- Production remote MCP endpoint is deployed and reachable.
+- Production remote MCP endpoint is deployed and reachable at `https://relay-desk-mjq6.vercel.app/mcp`.
+- Developer/company identity verification is completed in the publishing OpenAI organization.
 - Publisher/domain verification is completed in the OpenAI dashboard.
 - Run **Scan tools** against the production MCP endpoint after the final MCP deployment.
 - Confirm every scanned tool reports accurate `readOnlyHint`, `destructiveHint`, and `openWorldHint`.
 - Complete the annotation justifications in the submission UI.
 - Confirm public privacy, terms, support/contact and other required URLs are reachable.
 - Supply reviewer credentials/access that can operate the dedicated reviewer device without exposing unrelated user machines.
-- Enter the five positive and three negative cases above (or equivalent final wording).
+- Provide a recorded demo URL showing the main RelayDesk use cases/tools on supported platforms.
+- Enter exactly the five positive and three negative cases above (or equivalent final wording).
+- Add release notes for the submitted production version.
 - Re-run tool scan after any MCP schema/annotation change before submission.
 - If the dashboard reports external frame domains, explain each one; do not add screenshots unless the current tool scan reports a UI output template.
 - Complete the current OpenAI domain-verification challenge at `/.well-known/openai-apps-challenge` when the dashboard provides the exact token.
+- For OAuth review, confirm the authorization server advertises `openid` and `email`, and that its UserInfo response supplies verified email claims required for workspace domain restrictions.
 
 Current OpenAI references:
 - https://developers.openai.com/plugins/deploy/app-review
