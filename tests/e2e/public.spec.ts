@@ -19,6 +19,18 @@ test("normal account sign-in surface is available", async ({ page }) => {
   await expect(page.getByRole("button", { name: "New to RelayDesk? Create an account" })).toBeVisible();
 });
 
+
+test("password recovery surfaces are available", async ({ page }) => {
+  await page.goto("/auth/login");
+  await expect(page.getByRole("link", { name: "Forgot password?" })).toBeVisible();
+  await page.goto("/auth/forgot-password");
+  await expect(page.getByRole("heading", { name: "Reset your password" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Send reset link" })).toBeVisible();
+  await page.goto("/auth/reset-password");
+  await expect(page.getByRole("heading", { name: "Choose a new password" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Update password" })).toBeVisible();
+});
+
 test("dashboard requires authentication", async ({ page }) => {
   await page.goto("/dashboard");
   await expect(page).toHaveURL(/\/auth\/login/);
