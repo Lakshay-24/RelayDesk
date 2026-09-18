@@ -48,7 +48,7 @@ export default function AccountLogin() {
   }
 
   return <main className="shell"><section className="card auth-card">
-    <Link className="brand" href="/"><span className="brand-mark">R</span><span>RelayDesk</span></Link>
+    <Link className="brand" href="/"><img className="brand-mark" src="/relaydesk-mark.svg" alt="" width={34} height={34} /><span>RelayDesk</span></Link>
     <h1>{mode === "signin" ? "Sign in" : "Create your account"}</h1>
     <p className="lead">Connect and manage computers you own, then use them from compatible AI clients.</p>
     {message && <p className="notice">{message}</p>}
