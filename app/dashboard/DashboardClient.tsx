@@ -10,13 +10,16 @@ import AccountSecurity from "./AccountSecurity";
 type Device = { id:string; name:string; hostname:string|null; platform:string|null; status:string; last_seen_at:string|null; created_at:string; agent_version:string|null };
 type Reliability = { total_devices:number; online_devices:number; total_calls:number; done_calls:number; error_calls:number; inflight_calls:number; success_pct:number|null; p50_ms:number|null; p95_ms:number|null };
 type Billing = { plan:string; status:string; currency:string|null; amount_minor:number|null; current_period_end:string|null; cancel_at_period_end:boolean };
+type CommandAudit = { id:string; device_id:string; tool_name:string; status:string; created_at:string; started_at:string|null; finished_at:string|null; error:string|null };
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 
-export default function DashboardClient({ email, initialDevices, initialUsage, initialReliability, initialBilling }:{ email:string; initialDevices:Device[]; initialUsage:number; initialReliability:Reliability|null; initialBilling:Billing|null }) {
+export default function DashboardClient({ email, initialDevices, initialUsage, initialReliability, initialBilling, initialRecentCommands }:{ email:string; initialDevices:Device[]; initialUsage:number; initialReliability:Reliability|null; initialBilling:Billing|null; initialRecentCommands:CommandAudit[] }) {
   const [devices,setDevices]=useState(initialDevices);
   const [usage,setUsage]=useState(initialUsage);
   const [reliability,setReliability]=useState(initialReliability);
   const [billing,setBilling]=useState(initialBilling);
+  const [recentCommands,setRecentCommands]=useState(initialRecentCommands);
+  const [latestAgentVersion,setLatestAgentVersion]=useState<string|null>(null);
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState("");
   const [rotationToken,setRotationToken]=useState<string|null>(null);
