@@ -1,13 +1,15 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import os from "node:os";
+import { randomUUID } from "node:crypto";
 import { config } from "./config.js";
 const supervised = process.argv.includes("--service");
 
 const cfg = config();
+const agentInstanceId = randomUUID();
 const channelUrl = `${cfg.url}/functions/v1/device-channel`;
 const transport = new StdioClientTransport({ command: cfg.desktopCommand, args: cfg.desktopArgs });
-const desktop = new Client({ name: "relaydesk-agent", version: "0.4.1" });
+const desktop = new Client({ name: "relaydesk-agent", version: "0.4.2" });
 await desktop.connect(transport);
 const listed = await desktop.listTools();
 let shuttingDown = false;
@@ -37,7 +39,7 @@ async function post(body, timeoutMs = 15000) {
 async function hello() {
     const result = await post({
         action: "hello", hostname: os.hostname(), platform: process.platform,
-        agent_version: "0.4.1", tools: listed.tools
+        agent_version: "0.4.2", agent_instance_id: agentInstanceId, tools: listed.tools
     });
     deviceId = result.device_id;
     lastHeartbeat = Date.now();
@@ -51,7 +53,7 @@ async function complete(commandId, result, error) {
     let delay = 400;
     for (let attempt = 0; attempt < 5; attempt++) {
         try {
-            await post({ action: "complete", command_id: commandId, result, error: error ? String(error) : undefined });
+            await post({ action: "complete", command_id: commandId, agent_instance_id: agentInstanceId, result, error: error ? String(error) : undefined });
             return;
         } catch (e) {
             if (e instanceof DeviceAuthError) throw e;
@@ -123,7 +125,7 @@ while (!shuttingDown) {
         await heartbeatIfDue();
         if (inFlight.size < cfg.maxConcurrency) {
             const slots = cfg.maxConcurrency - inFlight.size;
-            const polled = await post({ action: "poll", slots });
+            const polled = await post({ action: "poll", slots, agent_instance_id: agentInstanceId });
             const commands = Array.isArray(polled.commands)
                 ? polled.commands
                 : (polled.command ? [polled.command] : []);
