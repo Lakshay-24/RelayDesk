@@ -10,13 +10,16 @@ import AccountSecurity from "./AccountSecurity";
 type Device = { id:string; name:string; hostname:string|null; platform:string|null; status:string; last_seen_at:string|null; created_at:string; agent_version:string|null };
 type Reliability = { total_devices:number; online_devices:number; total_calls:number; done_calls:number; error_calls:number; inflight_calls:number; success_pct:number|null; p50_ms:number|null; p95_ms:number|null };
 type Billing = { plan:string; status:string; currency:string|null; amount_minor:number|null; current_period_end:string|null; cancel_at_period_end:boolean };
+type CommandAudit = { id:string; device_id:string; tool_name:string; status:string; created_at:string; started_at:string|null; finished_at:string|null; error:string|null };
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 
-export default function DashboardClient({ email, initialDevices, initialUsage, initialReliability, initialBilling }:{ email:string; initialDevices:Device[]; initialUsage:number; initialReliability:Reliability|null; initialBilling:Billing|null }) {
+export default function DashboardClient({ email, initialDevices, initialUsage, initialReliability, initialBilling, initialRecentCommands }:{ email:string; initialDevices:Device[]; initialUsage:number; initialReliability:Reliability|null; initialBilling:Billing|null; initialRecentCommands:CommandAudit[] }) {
   const [devices,setDevices]=useState(initialDevices);
   const [usage,setUsage]=useState(initialUsage);
   const [reliability,setReliability]=useState(initialReliability);
   const [billing,setBilling]=useState(initialBilling);
+  const [recentCommands,setRecentCommands]=useState(initialRecentCommands);
+  const [latestAgentVersion,setLatestAgentVersion]=useState<string|null>(null);
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState("");
   const [rotationToken,setRotationToken]=useState<string|null>(null);
@@ -25,11 +28,26 @@ export default function DashboardClient({ email, initialDevices, initialUsage, i
   const usagePct = useMemo(()=>proActive?0:Math.min(100,Math.round((usage/FREE_MONTHLY_TOOL_CALLS)*100)),[usage,proActive]);
 
   useEffect(()=>{
+    void refreshLatestAgentVersion();
     const id=window.setInterval(()=>{ void refreshPresence(); },20000);
     return ()=>window.clearInterval(id);
   // Presence polling intentionally excludes billing/usage queries.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
+
+  async function refreshLatestAgentVersion(){
+    try{
+      const response=await fetch("/agent-dist/manifest.json",{cache:"no-store"});
+      const manifest=await response.json();
+      setLatestAgentVersion(typeof manifest?.version==="string"?manifest.version:null);
+    }catch{setLatestAgentVersion(null)}
+  }
+
+  function commandDuration(command:CommandAudit){
+    if(!command.started_at) return null;
+    const end=command.finished_at?new Date(command.finished_at).getTime():Date.now();
+    return Math.max(0,end-new Date(command.started_at).getTime());
+  }
 
   async function session() {
     const supabase=createClient();
@@ -40,12 +58,14 @@ export default function DashboardClient({ email, initialDevices, initialUsage, i
   async function token() { return (await session()).session.access_token; }
   async function refreshPresence(){
     const supabase=createClient();
-    const [{data:deviceRows},{data:reliabilityRows}]=await Promise.all([
+    const [{data:deviceRows},{data:reliabilityRows},{data:commandRows}]=await Promise.all([
       supabase.from("devices").select("id,name,hostname,platform,status,last_seen_at,created_at,agent_version").order("created_at",{ascending:true}),
       supabase.rpc("get_relaydesk_reliability",{window_hours:24}),
+      supabase.from("commands").select("id,device_id,tool_name,status,created_at,started_at,finished_at,error").order("created_at",{ascending:false}).limit(20),
     ]);
     setDevices((deviceRows??[]) as Device[]);
     setReliability((reliabilityRows?.[0]??null) as Reliability|null);
+    setRecentCommands((commandRows??[]) as CommandAudit[]);
   }
 
   async function refresh(){
@@ -54,14 +74,17 @@ export default function DashboardClient({ email, initialDevices, initialUsage, i
     setDevices((data??[]) as Device[]);
     const now=new Date();
     const monthStart=`${now.getUTCFullYear()}-${String(now.getUTCMonth()+1).padStart(2,"0")}-01`;
-    const [{data:usageRow},{data:reliabilityRows},{data:billingRow}]=await Promise.all([
+    const [{data:usageRow},{data:reliabilityRows},{data:billingRow},{data:commandRows}]=await Promise.all([
       supabase.from("usage_monthly").select("tool_calls").eq("month_start",monthStart).maybeSingle(),
       supabase.rpc("get_relaydesk_reliability",{window_hours:24}),
       supabase.from("billing_subscriptions").select("plan,status,currency,amount_minor,current_period_end,cancel_at_period_end").maybeSingle(),
+      supabase.from("commands").select("id,device_id,tool_name,status,created_at,started_at,finished_at,error").order("created_at",{ascending:false}).limit(20),
     ]);
     setUsage(Number(usageRow?.tool_calls??0));
     setReliability((reliabilityRows?.[0]??null) as Reliability|null);
     setBilling((billingRow??null) as Billing|null);
+    setRecentCommands((commandRows??[]) as CommandAudit[]);
+    await refreshLatestAgentVersion();
   }
   function addDevice(){window.location.assign("/install")}
   async function manage(deviceId:string,action:"revoke"|"delete"|"rotate"|"rename"){
@@ -108,15 +131,26 @@ export default function DashboardClient({ email, initialDevices, initialUsage, i
   return <main className="app-shell">
     <aside className="sidebar">
       <Link className="brand" href="/"><img className="brand-mark" src="/relaydesk-mark.svg" alt="" width={34} height={34} /><span>RelayDesk</span></Link>
-      <nav className="nav"><a className="active" href="#devices">Devices</a><a href="#reliability">Reliability</a><a href="#usage">Usage</a><a href="#connections">Connections</a></nav>
+      <nav className="nav"><a className="active" href="#devices">Devices</a><a href="#reliability">Reliability</a><a href="#activity">Activity</a><a href="#usage">Usage</a><a href="#connections">Connections</a></nav>
       <div className="sidebar-bottom"><div className="account-email">{email}</div><button className="text-button left" onClick={signOut}>Sign out</button></div>
     </aside>
     <section className="dashboard-content">
       <header className="dashboard-header"><div><p className="eyebrow">Remote MCP</p><h1>Devices</h1><p className="muted">Devices your AI clients can reach through RelayDesk. Current agent support covers Windows, macOS, and Linux computers and servers.</p></div><button className="button primary" onClick={addDevice}>+ Add device</button></header>
       {message&&<p className="notice">{message}</p>}
       {rotationToken&&<section className="pair-card"><h2>Replacement credential</h2><p>This advanced rotation secret is shown once. Update the affected agent before revoking its old local secret.</p><code>{rotationToken}</code><div className="actions"><button className="button" onClick={()=>navigator.clipboard.writeText(rotationToken)}>Copy</button><button className="text-button" onClick={()=>setRotationToken(null)}>Dismiss</button></div></section>}
-      <section className="panel" id="devices"><div className="panel-title"><h2>Your devices</h2><button className="danger-link" disabled={busy||!devices.length} onClick={revokeAll}>Revoke all</button></div>{devices.length===0?<div className="empty"><p>No devices paired yet.</p><Link className="button" href="/install">Add your first device</Link></div>:devices.map(d=><article className="device-row" key={d.id}><div><div className="device-name"><span className={`status-dot ${d.status}`}/>{d.name}</div><div className="device-meta">{d.hostname??d.platform??"Machine pending"} · {d.platform??"Platform pending"}{d.agent_version?` · Agent ${d.agent_version}`:""} · {d.last_seen_at?`Last seen ${new Date(d.last_seen_at).toLocaleString()}`:"Never connected"}</div></div><div className="device-actions"><span className={`status-pill ${d.status}`}>{d.status}</span><button onClick={()=>manage(d.id,"rename")}>Rename</button><button onClick={()=>manage(d.id,"rotate")}>Rotate</button><button className="danger-link" onClick={()=>manage(d.id,"revoke")}>Revoke</button><button className="danger-link" onClick={()=>manage(d.id,"delete")}>Delete</button></div></article>)}</section>
+      <section className="panel" id="devices"><div className="panel-title"><h2>Your devices</h2><button className="danger-link" disabled={busy||!devices.length} onClick={revokeAll}>Revoke all</button></div>{devices.length===0?<div className="empty"><p>No devices paired yet.</p><Link className="button" href="/install">Add your first device</Link></div>:devices.map(d=><article className="device-row" key={d.id}><div><div className="device-name"><span className={`status-dot ${d.status}`}/>{d.name}</div><div className="device-meta">{d.hostname??d.platform??"Machine pending"} · {d.platform??"Platform pending"}{d.agent_version?` · Agent ${d.agent_version}`:""}{d.agent_version&&latestAgentVersion&&d.agent_version!==latestAgentVersion?` · Update ${latestAgentVersion} available`:""} · {d.last_seen_at?`Last seen ${new Date(d.last_seen_at).toLocaleString()}`:"Never connected"}</div></div><div className="device-actions"><span className={`status-pill ${d.status}`}>{d.status}</span><button onClick={()=>manage(d.id,"rename")}>Rename</button><button onClick={()=>manage(d.id,"rotate")}>Rotate</button><button className="danger-link" onClick={()=>manage(d.id,"revoke")}>Revoke</button><button className="danger-link" onClick={()=>manage(d.id,"delete")}>Delete</button></div></article>)}</section>
       <section className="panel" id="reliability"><div className="panel-title"><div><h2>Reliability · last 24h</h2><p className="small">Measured from real RelayDesk device commands, not browser pings.</p></div><button className="button" disabled={busy} onClick={refresh}>Refresh</button></div>{!reliability?<p className="small">No reliability sample yet.</p>:<div className="connection-grid"><div><strong>{reliability.online_devices} / {reliability.total_devices}</strong><p className="small">Devices online</p></div><div><strong>{reliability.total_calls}</strong><p className="small">Tool calls</p></div><div><strong>{reliability.success_pct==null?"—":`${reliability.success_pct}%`}</strong><p className="small">Completed-call success</p></div><div><strong>{reliability.p95_ms==null?"—":`${Math.round(reliability.p95_ms)} ms`}</strong><p className="small">P95 end-to-end command latency</p></div></div>}<p className="small">Done {reliability?.done_calls??0} · Errors {reliability?.error_calls??0} · In flight {reliability?.inflight_calls??0}. Treat small samples cautiously.</p></section>
+      <section className="panel" id="activity">
+        <div className="panel-title"><div><h2>Recent activity</h2><p className="small">Latest RelayDesk tool calls for your account. Command payloads are not shown here.</p></div><button className="button" disabled={busy} onClick={refresh}>Refresh</button></div>
+        {recentCommands.length===0?<p className="small">No recent RelayDesk commands.</p>:recentCommands.map(command=>{
+          const device=devices.find(d=>d.id===command.device_id);
+          const duration=commandDuration(command);
+          return <article className="device-row" key={command.id}>
+            <div><div className="device-name">{command.tool_name}</div><div className="device-meta">{device?.name??"Unknown device"} · {new Date(command.created_at).toLocaleString()}{duration!=null?` · ${duration} ms`:""}{command.error?` · ${command.error.slice(0,140)}`:""}</div></div>
+            <div className="device-actions"><span className={`status-pill ${command.status==="done"?"online":command.status==="error"?"offline":""}`}>{command.status}</span></div>
+          </article>;
+        })}
+      </section>
       <section className="panel" id="usage"><div className="panel-title"><div><h2>Usage & billing</h2><p className="small">{proActive?"Pro plan · active":"Free plan · 5,000 remote tool calls/month"}</p></div><strong>{proActive?usage.toLocaleString():`${usage.toLocaleString()} / ${FREE_MONTHLY_TOOL_CALLS.toLocaleString()}`}</strong></div>{!proActive&&<div className="meter"><span style={{width:`${usagePct}%`}}/></div>}<p className="small">Monthly usage is counted independently from short-lived command history, so cleanup does not reset the meter.</p>{billing&&<div className="actions"><span className="small">Billing status: {billing.status}{billing.currency?` · ${billing.currency}`:""}{billing.current_period_end?` · current period ends ${new Date(billing.current_period_end).toLocaleDateString()}`:""}</span>{proActive&&!billing.cancel_at_period_end&&<button className="danger-link" disabled={busy} onClick={cancelSubscription}>Cancel at period end</button>}{billing.cancel_at_period_end&&<span className="small">Cancellation scheduled.</span>}</div>}{!proActive&&<div className="actions"><Link className="button" href="/pricing">View Pro</Link></div>}</section>
       <ConnectionGuide/>
       <AccountSecurity email={email}/>
