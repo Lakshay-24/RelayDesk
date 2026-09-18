@@ -114,11 +114,16 @@ while (!shuttingDown) {
         if (executionFatal) throw executionFatal;
         await heartbeatIfDue();
         if (inFlight.size < cfg.maxConcurrency) {
-            const { command } = await post({ action: "poll" });
+            const slots = cfg.maxConcurrency - inFlight.size;
+            const polled = await post({ action: "poll", slots });
+            const commands = Array.isArray(polled.commands)
+                ? polled.commands
+                : (polled.command ? [polled.command] : []);
             transportRetryMs = 1000;
-            if (command) {
+            if (commands.length) {
                 idlePollMs = 100;
-                startExecution(command);
+                for (const command of commands.slice(0, slots))
+                    startExecution(command);
                 continue;
             }
         }
