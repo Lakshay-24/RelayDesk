@@ -30,7 +30,7 @@ export default function BillingCard({preferredCurrency}:{preferredCurrency:strin
   const [message,setMessage]=useState("");
 
   useEffect(()=>{
-    fetch(`${SUPABASE_URL}/functions/v1/billing-status`,{cache:"no-store"})
+    fetch("/api/billing/status")
       .then(r=>r.json())
       .then((x:BillingStatus)=>{
         setStatus(x);
