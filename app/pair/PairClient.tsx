@@ -61,7 +61,8 @@ export default function PairClient({ initialCode, email }:{ initialCode:string; 
     <Link className="brand" href="/"><img className="brand-mark" src="/relaydesk-mark.svg" alt="" width={34} height={34} /><span>RelayDesk</span></Link>
     <p className="eyebrow">Pair a device</p>
     <h1>Connect this device</h1>
-    <p className="lead">Enter the short code shown by the RelayDesk agent on the device you want to connect.</p>\n    <p className="small">Need the agent first? <Link href="/install">Install RelayDesk on Windows, macOS, or Linux.</Link></p>
+    <p className="lead">Enter the short code shown by the RelayDesk agent on the device you want to connect.</p>
+    <p className="small">Need the agent first? <Link href="/install">Install RelayDesk on Windows, macOS, or Linux.</Link></p>
     <label className="field">Pairing code<input value={code} onChange={e=>setCode(normalize(e.target.value))} placeholder="ABCD-EFGH" autoCapitalize="characters" autoComplete="one-time-code" /></label>
     <button className="button" disabled={busy||code.replace(/-/g,"").length!==8} onClick={()=>inspect()}>{busy?"Checking…":"Check code"}</button>
     {message&&<p className="notice">{message}</p>}
