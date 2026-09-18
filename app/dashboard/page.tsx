@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import DashboardClient from "./DashboardClient";
+
+export const metadata: Metadata = { title: "Dashboard", robots: { index: false, follow: false } };
 
 export const dynamic = "force-dynamic";
 
