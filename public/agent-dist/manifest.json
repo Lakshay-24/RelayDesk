@@ -1,6 +1,6 @@
 {
   "version": "0.4.2",
-  "launcher_sha256": "7902df69302cdb548d2db713981e92bc74de7e53265ebe033580ee515f8f0efc",
+  "launcher_sha256": "e42cc2aff6a1fd9dc8b6164afbd56fd783965e569e6202bb52f75659cf7b6c1d",
   "files": {
     "package.json": "abd77becf4387e665616c4f10a5b76dfa712c392c40bd2898e36551c6027c580",
     "config.js": "63644cf9536acf70cabe4db4458ad88ac3f62ae29c15767d446be223c95467c1",

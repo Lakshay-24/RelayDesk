@@ -71,6 +71,11 @@ async function installRelease(manifest){
     return releaseRoot;
   }catch(error){fs.rmSync(staging,{recursive:true,force:true});throw error;}
 }
+function compareVersions(a,b){
+  const pa=a.split(".").map(Number), pb=b.split(".").map(Number);
+  for(let i=0;i<3;i++){const diff=(pa[i]??0)-(pb[i]??0); if(diff!==0) return diff;}
+  return 0;
+}
 async function refresh(){
   const remote=await fetchManifest();
   const current=readCurrent();
@@ -78,8 +83,16 @@ async function refresh(){
     const root=path.join(releasesRoot,current.version);
     if(verifyRelease(root,remote)) return false;
   }
+  if(current?.blocked===remote.version){
+    console.warn(`RelayDesk ignored release ${remote.version} because it was rolled back after an early failure.`);
+    return false;
+  }
+  if(current?.version && compareVersions(remote.version,current.version)<0){
+    console.warn(`RelayDesk ignored older release ${remote.version}; current release is ${current.version}.`);
+    return false;
+  }
   await installRelease(remote);
-  writeCurrent({version:remote.version,previous:current?.version??null});
+  writeCurrent({version:remote.version,previous:current?.version??null,blocked:null});
   return true;
 }
 function childEntry(version){return path.join(releasesRoot,version,"dist","index.js");}
@@ -111,7 +124,7 @@ while(true){
   if(result.code===75){backoff=1000;rolledBack=false;continue;}
   if(result.runtime<15000&&current.previous&&!rolledBack&&fs.existsSync(childEntry(current.previous))){
     console.error(`RelayDesk release ${current.version} exited early; rolling back to ${current.previous}.`);
-    writeCurrent({version:current.previous,previous:current.version});
+    writeCurrent({version:current.previous,previous:null,blocked:current.version});
     rolledBack=true;
     continue;
   }
