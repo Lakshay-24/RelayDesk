@@ -83,18 +83,10 @@ async function refresh(){
   return true;
 }
 function childEntry(version){return path.join(releasesRoot,version,"dist","index.js");}
-function childEnv(){
-  const env={...process.env};
-  const credential=path.join(agentRoot,"credentials.json");
-  if(fs.existsSync(credential)) env.RELAYDESK_CREDENTIALS_FILE=credential;
-  const runtimeDir=path.dirname(process.execPath);
-  env.PATH=env.PATH?runtimeDir+path.delimiter+env.PATH:runtimeDir;
-  return env;
-}
 function runChild(entry){
   return new Promise((resolve,reject)=>{
     const started=Date.now();
-    const child=spawn(process.execPath,[entry,"--service"],{stdio:"inherit",env:{...childEnv(),RELAYDESK_LAUNCHED:"1"}});
+    const child=spawn(process.execPath,[entry,"--service"],{stdio:"inherit",env:{...process.env,RELAYDESK_LAUNCHED:"1"}});
     child.once("error",reject);
     child.once("exit",(code)=>resolve({code,runtime:Date.now()-started}));
   });
