@@ -43,7 +43,7 @@ test("OAuth login fails safely without an authorization request", async ({ page 
   await page.goto("/oauth/login");
   await expect(page.getByRole("heading", { name: "Sign in to authorize" })).toBeVisible();
   await page.getByRole("button", { name: "Continue with Google" }).click();
-  await expect(page.getByText("Missing authorization request. Restart connection from your AI client.")).toBeVisible();
+  await expect(page.getByText("Missing authorization request. Restart the connection from your AI client.")).toBeVisible();
 });
 
 test("OAuth consent rejects a missing authorization id", async ({ page }) => {
