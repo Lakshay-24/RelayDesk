@@ -2,10 +2,23 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import os from "node:os";
 import { config } from "./config.js";
+import { maybeSelfUpdate } from "./update.js";
+const supervised = process.argv.includes("--service");
+if (supervised) {
+    try {
+        if (await maybeSelfUpdate()) {
+            console.log("RelayDesk update installed; restarting into the verified release.");
+            process.exit(75);
+        }
+    }
+    catch (error) {
+        console.error("RelayDesk update check failed safely; continuing with the current verified agent:", error);
+    }
+}
 const cfg = config();
 const channelUrl = `${cfg.url}/functions/v1/device-channel`;
 const transport = new StdioClientTransport({ command: cfg.desktopCommand, args: cfg.desktopArgs });
-const desktop = new Client({ name: "relaydesk-agent", version: "0.3.0" });
+const desktop = new Client({ name: "relaydesk-agent", version: "0.3.1" });
 await desktop.connect(transport);
 const listed = await desktop.listTools();
 let shuttingDown = false;
@@ -13,7 +26,6 @@ let deviceId = "";
 let lastHeartbeat = 0;
 class DeviceAuthError extends Error {}
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-const supervised = process.argv.includes("--service");
 const supervisedRestartMs = Math.max(60_000, Number(process.env.RCO_AGENT_AUTO_RESTART_MS || 86_400_000));
 async function post(body, timeoutMs = 15000) {
     const controller = new AbortController();
@@ -36,7 +48,7 @@ async function post(body, timeoutMs = 15000) {
 async function hello() {
     const result = await post({
         action: "hello", hostname: os.hostname(), platform: process.platform,
-        agent_version: "0.3.0", tools: listed.tools
+        agent_version: "0.3.1", tools: listed.tools
     });
     deviceId = result.device_id;
     lastHeartbeat = Date.now();
