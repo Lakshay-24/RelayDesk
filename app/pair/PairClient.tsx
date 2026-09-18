@@ -58,7 +58,7 @@ export default function PairClient({ initialCode, email }:{ initialCode:string; 
   }
 
   return <main className="shell"><section className="card auth-card">
-    <Link className="brand" href="/"><span className="brand-mark">R</span><span>RelayDesk</span></Link>
+    <Link className="brand" href="/"><img className="brand-mark" src="/relaydesk-mark.svg" alt="" width={34} height={34} /><span>RelayDesk</span></Link>
     <p className="eyebrow">Pair a device</p>
     <h1>Connect this device</h1>
     <p className="lead">Enter the short code shown by the RelayDesk agent on the device you want to connect.</p>
