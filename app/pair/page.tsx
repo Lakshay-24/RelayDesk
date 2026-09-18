@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import PairClient from "./PairClient";
+
+export const metadata: Metadata = { title: "Pair a device", robots: { index: false, follow: false } };
 
 export const dynamic = "force-dynamic";
 
