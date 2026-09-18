@@ -50,24 +50,11 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Serve branch agent bundle
-        shell: pwsh
-        run: |
-          $server = Start-Process python -ArgumentList @("-m","http.server","8765","--bind","127.0.0.1","--directory","public/agent-dist") -PassThru -WindowStyle Hidden
-          $server.Id | Set-Content "$env:RUNNER_TEMP\relaydesk-http.pid"
-          for ($i=0; $i -lt 20; $i++) {
-            try {
-              Invoke-WebRequest -UseBasicParsing "http://127.0.0.1:8765/manifest.json" | Out-Null
-              exit 0
-            } catch {
-              Start-Sleep -Seconds 1
-            }
-          }
-          exit 1
       - name: Run Windows installer without pairing or service
         shell: powershell
         run: |
-          & .\public\install.ps1 -BaseUrl "http://127.0.0.1:8765" -InstallRoot "$env:RUNNER_TEMP\relaydesk-install" -SkipPair -SkipService
+          $base = "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/public/agent-dist"
+          & .\public\install.ps1 -BaseUrl $base -InstallRoot "$env:RUNNER_TEMP\relaydesk-install" -SkipPair -SkipService
       - name: Verify Windows versioned install layout and JSON encoding
         shell: pwsh
         run: |
