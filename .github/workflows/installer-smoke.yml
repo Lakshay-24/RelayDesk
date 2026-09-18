@@ -1,0 +1,46 @@
+name: RelayDesk installer smoke
+
+on:
+  pull_request:
+    paths:
+      - "public/install.sh"
+      - "public/agent-dist/**"
+      - ".github/workflows/installer-smoke.yml"
+  workflow_dispatch:
+
+jobs:
+  unix-installer:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Serve branch agent bundle
+        run: |
+          python3 -m http.server 8765 --bind 127.0.0.1 --directory public/agent-dist > /tmp/relaydesk-bundle.log 2>&1 &
+          echo $! > /tmp/relaydesk-bundle.pid
+          for i in {1..20}; do
+            curl -fsS http://127.0.0.1:8765/manifest.json >/dev/null && exit 0
+            sleep 1
+          done
+          exit 1
+      - name: Run installer without pairing or service
+        env:
+          RELAYDESK_DOWNLOAD_BASE: http://127.0.0.1:8765
+          RELAYDESK_INSTALL_ROOT: ${{ runner.temp }}/relaydesk-install
+          RELAYDESK_SKIP_PAIR: "1"
+          RELAYDESK_SKIP_SERVICE: "1"
+        run: bash public/install.sh
+      - name: Verify versioned install layout
+        env:
+          RELAYDESK_INSTALL_ROOT: ${{ runner.temp }}/relaydesk-install
+        run: |
+          test -f "$RELAYDESK_INSTALL_ROOT/agent/launcher.js"
+          test -f "$RELAYDESK_INSTALL_ROOT/agent/current.json"
+          version="$(node -e "const f=require('fs');const p=process.argv[1];process.stdout.write(JSON.parse(f.readFileSync(p,'utf8')).version)" "$RELAYDESK_INSTALL_ROOT/agent/current.json")"
+          test -n "$version"
+          test -f "$RELAYDESK_INSTALL_ROOT/agent/releases/$version/dist/index.js"
+          test -f "$RELAYDESK_INSTALL_ROOT/agent/releases/$version/dist/manifest.json"
+          test -d "$RELAYDESK_INSTALL_ROOT/agent/releases/$version/node_modules"
