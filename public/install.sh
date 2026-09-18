@@ -127,7 +127,14 @@ current_tmp="$CURRENT.new-$$"
 mv "$current_tmp" "$CURRENT"
 rm -f "$manifest_tmp"
 
-credential_file="$HOME/.relaydesk/credentials.json"
+stable_credential_file="$AGENT_ROOT/credentials.json"
+legacy_credential_file="$HOME/.relaydesk/credentials.json"
+if [ ! -f "$stable_credential_file" ] && [ -f "$legacy_credential_file" ]; then
+  cp "$legacy_credential_file" "$stable_credential_file"
+  chmod 600 "$stable_credential_file" 2>/dev/null || true
+fi
+export RELAYDESK_CREDENTIALS_FILE="$stable_credential_file"
+credential_file="$stable_credential_file"
 if [ "${RELAYDESK_SKIP_PAIR:-0}" != "1" ]; then
   if [ -f "$credential_file" ]; then
     step "Existing RelayDesk device credential found; keeping the current pairing"
