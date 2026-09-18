@@ -24,16 +24,16 @@ test("dashboard requires authentication", async ({ page }) => {
   await expect(page).toHaveURL(/\/auth\/login/);
 });
 
-test("pricing is explicit about live and planned tiers", async ({ page }) => {
+test("pricing is explicit about free and Pro tiers", async ({ page }) => {
   await page.goto("/pricing");
   await expect(page.getByRole("heading", { name: "Start free. Pay only when you use it heavily." })).toBeVisible();
   await expect(page.getByText("5,000 remote tool calls per month.")).toBeVisible();
-  await expect(page.getByText("Pro — planned")).toBeVisible();
-  await expect(page.getByText(/Billing is not live yet/)).toBeVisible();
+  await expect(page.getByText("Pro", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Billing activation in progress|Upgrade to Pro/)).toBeVisible();
 });
 
 test("legal and health endpoints are reachable", async ({ request }) => {
-  for (const path of ["/privacy", "/terms", "/health.txt"]) {
+  for (const path of ["/privacy", "/terms", "/refunds", "/contact", "/health.txt"]) {
     const response = await request.get(path);
     expect(response.ok(), `${path} should be reachable`).toBeTruthy();
   }

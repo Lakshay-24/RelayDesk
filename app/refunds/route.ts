@@ -1,0 +1,2 @@
+const SOURCE="https://atuvyeoctkevglimkmka.supabase.co/functions/v1/legal?doc=refunds";
+export async function GET(){const u=await fetch(SOURCE,{cache:"no-store"});return new Response(await u.arrayBuffer(),{status:u.status,headers:{"content-type":u.headers.get("content-type")??"text/html; charset=utf-8","cache-control":"no-store"}})}

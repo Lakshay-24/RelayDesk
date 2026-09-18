@@ -7,17 +7,20 @@ import FeedbackWidget, { type FeedbackPayload } from "./FeedbackWidget";
 
 type Device = { id:string; name:string; platform:string|null; status:string; last_seen_at:string|null; created_at:string };
 type Reliability = { total_devices:number; online_devices:number; total_calls:number; done_calls:number; error_calls:number; inflight_calls:number; success_pct:number|null; p50_ms:number|null; p95_ms:number|null };
+type Billing = { plan:string; status:string; currency:string|null; amount_minor:number|null; current_period_end:string|null; cancel_at_period_end:boolean };
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 
-export default function DashboardClient({ email, initialDevices, initialUsage, initialReliability }:{ email:string; initialDevices:Device[]; initialUsage:number; initialReliability:Reliability|null }) {
+export default function DashboardClient({ email, initialDevices, initialUsage, initialReliability, initialBilling }:{ email:string; initialDevices:Device[]; initialUsage:number; initialReliability:Reliability|null; initialBilling:Billing|null }) {
   const [devices,setDevices]=useState(initialDevices);
   const [usage,setUsage]=useState(initialUsage);
   const [reliability,setReliability]=useState(initialReliability);
+  const [billing,setBilling]=useState(initialBilling);
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState("");
   const [rotationToken,setRotationToken]=useState<string|null>(null);
   const FREE_MONTHLY_TOOL_CALLS = 5000;
-  const usagePct = useMemo(()=>Math.min(100,Math.round((usage/FREE_MONTHLY_TOOL_CALLS)*100)),[usage]);
+  const proActive=billing?.plan==="pro"&&billing?.status==="active";
+  const usagePct = useMemo(()=>proActive?0:Math.min(100,Math.round((usage/FREE_MONTHLY_TOOL_CALLS)*100)),[usage,proActive]);
 
   async function session() {
     const supabase=createClient();
@@ -32,12 +35,14 @@ export default function DashboardClient({ email, initialDevices, initialUsage, i
     setDevices((data??[]) as Device[]);
     const now=new Date();
     const monthStart=`${now.getUTCFullYear()}-${String(now.getUTCMonth()+1).padStart(2,"0")}-01`;
-    const [{data:usageRow},{data:reliabilityRows}]=await Promise.all([
+    const [{data:usageRow},{data:reliabilityRows},{data:billingRow}]=await Promise.all([
       supabase.from("usage_monthly").select("tool_calls").eq("month_start",monthStart).maybeSingle(),
       supabase.rpc("get_relaydesk_reliability",{window_hours:24}),
+      supabase.from("billing_subscriptions").select("plan,status,currency,amount_minor,current_period_end,cancel_at_period_end").maybeSingle(),
     ]);
     setUsage(Number(usageRow?.tool_calls??0));
     setReliability((reliabilityRows?.[0]??null) as Reliability|null);
+    setBilling((billingRow??null) as Billing|null);
   }
   function addDevice(){window.location.assign("/pair")}
   async function manage(deviceId:string,action:"revoke"|"delete"|"rotate"|"rename"){
@@ -57,6 +62,18 @@ export default function DashboardClient({ email, initialDevices, initialUsage, i
     if(!devices.length||!window.confirm("Revoke every paired device?"))return;
     setBusy(true);setMessage("");
     try{for(const d of devices){const access=await token();await fetch(`${SUPABASE_URL}/functions/v1/device-manage`,{method:"POST",headers:{authorization:`Bearer ${access}`,"content-type":"application/json"},body:JSON.stringify({device_id:d.id,action:"revoke"})});}await refresh()}catch{setMessage("Could not revoke every device.")}finally{setBusy(false)}
+  }
+  async function cancelSubscription(){
+    if(!window.confirm("Cancel RelayDesk Pro at the end of the current billing period?")) return;
+    setBusy(true);setMessage("");
+    try{
+      const access=await token();
+      const response=await fetch(`${SUPABASE_URL}/functions/v1/billing-cancel-subscription`,{method:"POST",headers:{authorization:`Bearer ${access}`,"content-type":"application/json"},body:"{}"});
+      const body=await response.json();
+      if(!response.ok) throw new Error(body.error??"Could not cancel subscription.");
+      setMessage("Cancellation scheduled for the end of the current billing period.");
+      await refresh();
+    }catch(e){setMessage(e instanceof Error?e.message:"Could not cancel subscription.")}finally{setBusy(false)}
   }
   async function submitFeedback(payload:FeedbackPayload){
     const access=await token();
@@ -81,7 +98,7 @@ export default function DashboardClient({ email, initialDevices, initialUsage, i
       {rotationToken&&<section className="pair-card"><h2>Replacement credential</h2><p>This advanced rotation secret is shown once. Update the affected agent before revoking its old local secret.</p><code>{rotationToken}</code><div className="actions"><button className="button" onClick={()=>navigator.clipboard.writeText(rotationToken)}>Copy</button><button className="text-button" onClick={()=>setRotationToken(null)}>Dismiss</button></div></section>}
       <section className="panel" id="devices"><div className="panel-title"><h2>Your devices</h2><button className="danger-link" disabled={busy||!devices.length} onClick={revokeAll}>Revoke all</button></div>{devices.length===0?<div className="empty"><p>No devices paired yet.</p><Link className="button" href="/pair">Pair your first device</Link></div>:devices.map(d=><article className="device-row" key={d.id}><div><div className="device-name"><span className={`status-dot ${d.status}`}/>{d.name}</div><div className="device-meta">{d.platform??"Platform pending"} · {d.last_seen_at?`Last seen ${new Date(d.last_seen_at).toLocaleString()}`:"Never connected"}</div></div><div className="device-actions"><span className={`status-pill ${d.status}`}>{d.status}</span><button onClick={()=>manage(d.id,"rename")}>Rename</button><button onClick={()=>manage(d.id,"rotate")}>Rotate</button><button className="danger-link" onClick={()=>manage(d.id,"revoke")}>Revoke</button><button className="danger-link" onClick={()=>manage(d.id,"delete")}>Delete</button></div></article>)}</section>
       <section className="panel" id="reliability"><div className="panel-title"><div><h2>Reliability · last 24h</h2><p className="small">Measured from real RelayDesk device commands, not browser pings.</p></div><button className="button" disabled={busy} onClick={refresh}>Refresh</button></div>{!reliability?<p className="small">No reliability sample yet.</p>:<div className="connection-grid"><div><strong>{reliability.online_devices} / {reliability.total_devices}</strong><p className="small">Devices online</p></div><div><strong>{reliability.total_calls}</strong><p className="small">Tool calls</p></div><div><strong>{reliability.success_pct==null?"—":`${reliability.success_pct}%`}</strong><p className="small">Completed-call success</p></div><div><strong>{reliability.p95_ms==null?"—":`${Math.round(reliability.p95_ms)} ms`}</strong><p className="small">P95 end-to-end command latency</p></div></div>}<p className="small">Done {reliability?.done_calls??0} · Errors {reliability?.error_calls??0} · In flight {reliability?.inflight_calls??0}. Treat small samples cautiously.</p></section>
-      <section className="panel" id="usage"><div className="panel-title"><div><h2>Usage</h2><p className="small">Free plan · 5,000 remote tool calls/month</p></div><strong>{usage.toLocaleString()} / {FREE_MONTHLY_TOOL_CALLS.toLocaleString()}</strong></div><div className="meter"><span style={{width:`${usagePct}%`}}/></div><p className="small">Monthly usage is counted independently from short-lived command history, so cleanup does not reset the meter.</p></section>
+      <section className="panel" id="usage"><div className="panel-title"><div><h2>Usage & billing</h2><p className="small">{proActive?"Pro plan · active":"Free plan · 5,000 remote tool calls/month"}</p></div><strong>{proActive?usage.toLocaleString():`${usage.toLocaleString()} / ${FREE_MONTHLY_TOOL_CALLS.toLocaleString()}`}</strong></div>{!proActive&&<div className="meter"><span style={{width:`${usagePct}%`}}/></div>}<p className="small">Monthly usage is counted independently from short-lived command history, so cleanup does not reset the meter.</p>{billing&&<div className="actions"><span className="small">Billing status: {billing.status}{billing.currency?` · ${billing.currency}`:""}{billing.current_period_end?` · current period ends ${new Date(billing.current_period_end).toLocaleDateString()}`:""}</span>{proActive&&!billing.cancel_at_period_end&&<button className="danger-link" disabled={busy} onClick={cancelSubscription}>Cancel at period end</button>}{billing.cancel_at_period_end&&<span className="small">Cancellation scheduled.</span>}</div>}{!proActive&&<div className="actions"><Link className="button" href="/pricing">View Pro</Link></div>}</section>
       <section className="panel" id="connections"><h2>Where you use it</h2><div className="connection-grid"><div><strong>ChatGPT</strong><p className="small">Connect RelayDesk with your RelayDesk account; your OpenAI account may be different.</p></div><div><strong>Claude & compatible MCP clients</strong><p className="small">Use https://relay-desk-mjq6.vercel.app/mcp with OAuth. The client and paired device do not need to be on the same machine.</p></div></div></section>
       <section className="panel" id="settings"><h2>Settings</h2><p className="small">Device credentials survive restarts and normal network drops. Re-pair only after an explicit revoke or credential loss.</p><div className="links"><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link><Link href="/support">Support</Link></div></section>
     </section>
