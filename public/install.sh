@@ -72,8 +72,25 @@ launcher_tmp="$LAUNCHER.new-$$"
 curl -fsSL "$BASE_URL/launcher.js" -o "$launcher_tmp"
 [ "$(sha256 "$launcher_tmp")" = "$launcher_expected" ] || { rm -f "$launcher_tmp"; echo "RelayDesk launcher checksum verification failed." >&2; exit 1; }
 if [ -f "$LAUNCHER" ]; then
-  [ "$(sha256 "$LAUNCHER")" = "$launcher_expected" ] || { echo "RelayDesk launcher differs from this release. Stop the service before upgrading the launcher." >&2; exit 1; }
-  rm -f "$launcher_tmp"
+  if [ "$(sha256 "$LAUNCHER")" != "$launcher_expected" ]; then
+    if [ "${RELAYDESK_SKIP_SERVICE:-0}" = "1" ]; then
+      rm -f "$launcher_tmp"
+      echo "RelayDesk launcher upgrade requires service management. Re-run without RELAYDESK_SKIP_SERVICE=1." >&2
+      exit 1
+    fi
+    step "Upgrading the stable RelayDesk launcher"
+    if [ "$platform" = "linux" ]; then
+      if [ "$(id -u)" = "0" ]; then systemctl stop relaydesk-agent.service >/dev/null 2>&1 || true
+      else systemctl --user stop relaydesk-agent.service >/dev/null 2>&1 || true
+      fi
+    else
+      launchctl bootout "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.relaydesk.agent.plist" >/dev/null 2>&1 || true
+    fi
+    sleep 2
+    mv "$launcher_tmp" "$LAUNCHER"
+  else
+    rm -f "$launcher_tmp"
+  fi
 else
   mv "$launcher_tmp" "$LAUNCHER"
 fi
