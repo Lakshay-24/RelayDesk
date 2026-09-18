@@ -13,11 +13,21 @@ function Write-Step([string]$Message) {
   Write-Host ""
   Write-Host "==> $Message" -ForegroundColor Cyan
 }
-
 function Download-File([string]$Url, [string]$Destination) {
   $dir = Split-Path -Parent $Destination
   if ($dir) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
   Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $Destination
+}
+function Test-Release([string]$Root, $Manifest) {
+  foreach ($property in $Manifest.files.psobject.Properties) {
+    $file = $property.Name
+    $expected = [string]$property.Value
+    $path = if ($file -eq "package.json") { Join-Path $Root $file } else { Join-Path (Join-Path $Root "dist") $file }
+    if (!(Test-Path $path)) { return $false }
+    $actual = (Get-FileHash -Algorithm SHA256 -Path $path).Hash.ToLowerInvariant()
+    if ($actual -ne $expected) { return $false }
+  }
+  return $true
 }
 
 if ([string]::IsNullOrWhiteSpace($InstallRoot)) {
@@ -41,9 +51,11 @@ $NodeDir = Join-Path $RuntimeRoot ($NodeArchive -replace "\.zip$","")
 $NodeExe = Join-Path $NodeDir "node.exe"
 $NpmCmd = Join-Path $NodeDir "npm.cmd"
 $AgentRoot = Join-Path $InstallRoot "agent"
-$DistDir = Join-Path $AgentRoot "dist"
+$ReleasesRoot = Join-Path $AgentRoot "releases"
+$LauncherPath = Join-Path $AgentRoot "launcher.js"
+$CurrentPath = Join-Path $AgentRoot "current.json"
 
-New-Item -ItemType Directory -Force -Path $InstallRoot,$RuntimeRoot,$AgentRoot,$DistDir | Out-Null
+New-Item -ItemType Directory -Force -Path $InstallRoot,$RuntimeRoot,$AgentRoot,$ReleasesRoot | Out-Null
 
 if (!(Test-Path $NodeExe)) {
   Write-Step "Installing the private RelayDesk Node runtime"
@@ -57,25 +69,81 @@ if (!(Test-Path $NodeExe)) {
   Expand-Archive -Path $tmp -DestinationPath $RuntimeRoot -Force
   Remove-Item $tmp -Force -ErrorAction SilentlyContinue
 }
+if (!(Test-Path $NodeExe) -or !(Test-Path $NpmCmd)) { throw "RelayDesk runtime installation failed." }
 
-if (!(Test-Path $NodeExe) -or !(Test-Path $NpmCmd)) {
-  throw "RelayDesk runtime installation failed."
+Write-Step "Downloading and verifying the RelayDesk release manifest"
+$ManifestTemp = Join-Path $env:TEMP "relaydesk-manifest-$PID.json"
+Download-File "$BaseUrl/manifest.json" $ManifestTemp
+$ManifestRaw = Get-Content $ManifestTemp -Raw
+$Manifest = $ManifestRaw | ConvertFrom-Json
+$Version = [string]$Manifest.version
+if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid RelayDesk release version." }
+if ([string]::IsNullOrWhiteSpace([string]$Manifest.launcher_sha256)) { throw "RelayDesk launcher checksum missing." }
+
+Write-Step "Installing the verified RelayDesk launcher"
+$LauncherTemp = "$LauncherPath.new-$PID"
+Download-File "$BaseUrl/launcher.js" $LauncherTemp
+$LauncherHash = (Get-FileHash -Algorithm SHA256 -Path $LauncherTemp).Hash.ToLowerInvariant()
+if ($LauncherHash -ne ([string]$Manifest.launcher_sha256).ToLowerInvariant()) {
+  Remove-Item $LauncherTemp -Force -ErrorAction SilentlyContinue
+  throw "RelayDesk launcher checksum verification failed."
+}
+if (Test-Path $LauncherPath) {
+  $ExistingLauncherHash = (Get-FileHash -Algorithm SHA256 -Path $LauncherPath).Hash.ToLowerInvariant()
+  if ($ExistingLauncherHash -ne $LauncherHash) {
+    throw "RelayDesk launcher differs from this release. Stop the existing RelayDesk service before upgrading the launcher."
+  }
+  Remove-Item $LauncherTemp -Force
+} else {
+  Move-Item -Force $LauncherTemp $LauncherPath
 }
 
-Write-Step "Downloading the current RelayDesk agent"
-Download-File "$BaseUrl/package.json" (Join-Path $AgentRoot "package.json")
-foreach ($file in @("config.js","credentials.js","index.js","pair.js","service.js","update.js","manifest.json")) {
-  Download-File "$BaseUrl/$file" (Join-Path $DistDir $file)
+$ReleaseRoot = Join-Path $ReleasesRoot $Version
+$DistDir = Join-Path $ReleaseRoot "dist"
+$StageRoot = Join-Path $AgentRoot ".install-$Version-$PID"
+$StageDist = Join-Path $StageRoot "dist"
+Remove-Item $StageRoot -Recurse -Force -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force -Path $StageDist | Out-Null
+
+Write-Step "Downloading and verifying RelayDesk $Version"
+foreach ($property in $Manifest.files.psobject.Properties) {
+  $file = $property.Name
+  $expected = ([string]$property.Value).ToLowerInvariant()
+  if ($file -notin @("package.json","config.js","credentials.js","index.js","pair.js","service.js")) {
+    throw "Unexpected RelayDesk release file: $file"
+  }
+  $destination = if ($file -eq "package.json") { Join-Path $StageRoot $file } else { Join-Path $StageDist $file }
+  Download-File "$BaseUrl/$file" $destination
+  $actual = (Get-FileHash -Algorithm SHA256 -Path $destination).Hash.ToLowerInvariant()
+  if ($actual -ne $expected) { throw "Checksum verification failed for $file." }
 }
+Set-Content -Path (Join-Path $StageDist "manifest.json") -Value $ManifestRaw -Encoding UTF8
 
 Write-Step "Installing RelayDesk runtime dependencies"
-Push-Location $AgentRoot
+Push-Location $StageRoot
 try {
   & $NpmCmd install --omit=dev --no-audit --no-fund
   if ($LASTEXITCODE -ne 0) { throw "npm install failed with exit code $LASTEXITCODE" }
-} finally {
-  Pop-Location
+} finally { Pop-Location }
+
+if (Test-Path $ReleaseRoot) {
+  if (Test-Release $ReleaseRoot $Manifest) {
+    Remove-Item $StageRoot -Recurse -Force
+  } else {
+    throw "Existing RelayDesk release $Version is incomplete or corrupt. Stop RelayDesk before repairing this release."
+  }
+} else {
+  Move-Item $StageRoot $ReleaseRoot
 }
+
+$Previous = $null
+if (Test-Path $CurrentPath) {
+  try { $Previous = (Get-Content $CurrentPath -Raw | ConvertFrom-Json).version } catch {}
+}
+$CurrentTemp = "$CurrentPath.new-$PID"
+@{ version = $Version; previous = $Previous } | ConvertTo-Json | Set-Content -Path $CurrentTemp -Encoding UTF8
+Move-Item -Force $CurrentTemp $CurrentPath
+Remove-Item $ManifestTemp -Force -ErrorAction SilentlyContinue
 
 $CredentialFile = Join-Path $HOME ".relaydesk\credentials.json"
 if (!$SkipPair) {
@@ -84,22 +152,21 @@ if (!$SkipPair) {
   } else {
     Write-Step "Pairing this device with RelayDesk"
     $pairArgs = @((Join-Path $DistDir "pair.js"))
-    if (![string]::IsNullOrWhiteSpace($DeviceName)) {
-      $pairArgs += @("--name",$DeviceName)
-    }
+    if (![string]::IsNullOrWhiteSpace($DeviceName)) { $pairArgs += @("--name",$DeviceName) }
     & $NodeExe @pairArgs
     if ($LASTEXITCODE -ne 0) { throw "RelayDesk pairing failed." }
   }
 }
-
 if (!$SkipService) {
-  Write-Step "Installing the persistent RelayDesk background agent"
+  Write-Step "Installing the persistent RelayDesk launcher"
+  $env:RELAYDESK_LAUNCHER_PATH = $LauncherPath
   & $NodeExe (Join-Path $DistDir "service.js") install
   if ($LASTEXITCODE -ne 0) { throw "RelayDesk background service installation failed." }
 }
 
 Write-Step "RelayDesk installation complete"
 Write-Host "Install root: $InstallRoot"
+Write-Host "Release:      $Version"
 Write-Host "Runtime:      $NodeExe"
 if (!$SkipPair) { Write-Host "Pairing:      ready" }
 if (!$SkipService) { Write-Host "Background:   installed" }
