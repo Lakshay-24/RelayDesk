@@ -59,6 +59,7 @@ export default function AccountLogin() {
       <label className="field">Password<input type="password" minLength={8} autoComplete={mode === "signin" ? "current-password" : "new-password"} required value={password} onChange={e=>setPassword(e.target.value)} /></label>
       <button className="button wide" disabled={busy}>{busy ? "Working…" : mode === "signin" ? "Sign in" : "Create account"}</button>
     </form>
+    {mode === "signin" && <Link className="text-button" href="/auth/forgot-password">Forgot password?</Link>}
     <button className="text-button" type="button" onClick={()=>{setMode(mode === "signin" ? "signup" : "signin");setMessage("")}}>
       {mode === "signin" ? "New to RelayDesk? Create an account" : "Already have an account? Sign in"}
     </button>
